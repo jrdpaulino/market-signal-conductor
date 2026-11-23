@@ -1,0 +1,60 @@
+# Operations
+
+## Run locally
+
+```
+copy .env.example .env        (edit it; set SEC_USER_AGENT and MSC_DASH_PASSWORD)
+python -m unittest discover -s tests -t .
+python -m msc run-once        (one day's collection and model update)
+python -m msc serve           (dashboard at http://localhost:8080, user "admin")
+```
+
+Python 3.10 or newer; nothing else to install.
+
+## Deploy on Fly.io
+
+```
+fly launch --no-deploy --copy-config      (pick a unique app name and keep it in fly.toml)
+fly volumes create msc_data --size 1 --region ord
+fly secrets set MSC_DASH_PASSWORD=<long random password> SEC_USER_AGENT="Your Name you@example.com"
+fly deploy --ha=false
+```
+
+- `--ha=false` keeps a single machine. The SQLite file lives on one volume, which attaches to one machine, so a
+  second machine would hold a different, empty database.
+- Fly requires a card on file for always-on machines. Without one, machines stop after 5 minutes.
+- Expected cost is about $3.85 a month: $3.69 for a 512 MB machine plus $0.15 for the 1 GB volume. Shared IPv4 is
+  free. Check Fly's current pricing page, which changes.
+
+## Configuration
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `MSC_DASH_PASSWORD` | Dashboard password (the server refuses to start without one) | none |
+| `SEC_USER_AGENT` | Contact string SEC requires | none |
+| `MSC_DB` | SQLite path | `/data/msc.sqlite` in the container |
+| `MSC_SIGNALS` | Comma list of signals to run | all built-in |
+| `MSC_WATCHLIST` | Tickers whose insider filings are tracked | 20 large caps |
+| `MSC_PM_RULES` | JSON list of prediction-market rules (`match`, `exclude`, `bullish_if`, `search`) | recession, Fed cut, Fed hike |
+| `MSC_PM_VENUES` | `polymarket`, `kalshi` | both |
+| `MSC_KALSHI_SERIES` | Kalshi series tickers fetched directly | `KXRECSSNBER,KXFED,KXFEDDECISION` |
+| `MSC_RSS_FEEDS` | News feed URLs | Fed, SEC, Yahoo, CNBC, MarketWatch |
+| `MSC_EXTRA_MODULES` | Extra signal modules to import | none |
+| `MSC_PRICE_SOURCE` | `fred` or `stooq` | `fred` |
+
+## Routine care
+
+- **Weekly:** open the dashboard and confirm every signal says `ok`.
+- **After about 10 days of data:** `fly ssh console -C "python -m msc learn"`.
+- **Backups:** `fly ssh sftp get /data/msc.sqlite`.
+- **Rotate the password:** `fly secrets set MSC_DASH_PASSWORD=<new>`. The machine restarts and keeps its data.
+
+## Troubleshooting
+
+| Symptom | Likely cause and fix |
+| --- | --- |
+| Proxy error "could not find a good candidate" | Machine stopped. Check `fly status`; add a card at fly.io/trial, then `fly machine start <id>` |
+| `Error: app not found` on deploy | `app` in `fly.toml` does not match your app; edit it or pass `-a <name>` |
+| A signal shows `error` | Its row on the dashboard carries the reason; `fly logs --no-tail` for detail |
+| Prediction markets match nothing | `fly ssh console -C "python -m msc pm-debug recession"` shows what each venue returns; adjust `MSC_PM_RULES` |
+| `social` fails with 404 or 429 | Reddit blocks cloud hosts. Remove it: `fly secrets set MSC_SIGNALS=sec_filings,prediction_markets,journals_news,price_anchor,macro_curve,macro_credit,macro_vix` |

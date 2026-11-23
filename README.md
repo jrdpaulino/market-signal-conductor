@@ -1,0 +1,94 @@
+# Market Signal Conductor
+
+A web service that gathers market signals every day, feeds them into a layered Markov cycle model, and shows the
+result on a password-protected dashboard. It runs on a host, so it keeps working when your computer is off.
+
+**Start with the [vision](VISION.md). Design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and running it is in [docs/OPERATIONS.md](docs/OPERATIONS.md).**
+
+**It places no orders and contains no broker code.** `msc/execution/gate.py` defines the evidence the model's own
+forecasts must show before any trading code is added.
+
+## How it works
+
+```
+signals (plugins) --> observations --> Markov core --> dashboard
+ sec_filings          score in [-1,1]   Layer 1: market cycle (hidden states:
+ prediction_markets   confidence [0,1]    recovery > expansion > late_cycle > contraction)
+ social                                 Layer 2: each stock weak / neutral / strong,
+ journals_news                            with odds tilted by the market cycle
+ price_anchor                           Reliability weights: each signal earns influence from its
+ (your own...)                            track record against what the market did next
+```
+
+- **Reliability weights.** A signal starts with a low weight (0.30). Once it has 12+ market readings whose
+  outcome is already known, its weight moves with its correlation to the benchmark's next 20 days (shrunk toward
+  zero for small samples). Wrong-way signals fall to 0. Only outcomes already known on the evaluation day are used.
+- **Learning.** `python -m msc learn` re-fits the transition matrix, each signal's state means and P(market up)
+  per state from stored history (EM with pseudo-counts that anchor it to the starting values).
+- **Track record.** Every day's forecast is stored and scored once its 20 trading days have passed. The trading
+  gate needs 60+ scored forecasts, a better Brier score than the base rate, and a hit rate whose 95% lower bound
+  is above 50%.
+
+## Signals
+
+| Signal | Source | Needs |
+| --- | --- | --- |
+| `sec_filings` | SEC EDGAR Form 4 daily index: insider buying clusters per ticker; market-wide buy share | `SEC_USER_AGENT` with your email |
+| `prediction_markets` | Polymarket (Gamma API) and Kalshi (public market data): week-over-week change in odds of stock-friendly outcomes, tracked per venue | nothing (rules in `MSC_PM_RULES`, venues in `MSC_PM_VENUES`) |
+| `social` | Public Reddit RSS: tone of cashtag chatter | nothing |
+| `journals_news` | RSS feeds (`MSC_RSS_FEEDS`): tone, discounted by speculative wording | nothing |
+| `macro_curve`, `macro_credit`, `macro_vix` | FRED free CSV downloads: yield-curve slope (T10Y2Y, T10Y3M), high-yield spread (BAMLH0A0HYM2), VIX (VIXCLS). Three signals so each earns its own weight | nothing |
+| `price_anchor` | S&P 500 closes from FRED (default; `MSC_PRICE_SOURCE=stooq` to switch): benchmark trend, anchors the cycle states. The same prices score every forecast | nothing |
+
+### Adding a signal
+
+Copy `msc/signals/_template.py`, implement `collect()`, set `MSC_EXTRA_MODULES=your.module`. Paid sources
+(a news API, Kalshi, a premium sentiment feed) are added the same way; read the key from the environment.
+
+## Run locally
+
+```
+copy .env.example .env      (edit it)
+python -m unittest discover -s tests -t .
+python -m msc run-once      (one day's collection and model update)
+python -m msc serve         (dashboard at http://localhost:8080, user "admin")
+```
+
+Needs Python 3.10+ and nothing else (standard library only).
+
+## Deploy on Fly.io
+
+```
+fly launch --no-deploy --copy-config      (pick a unique app name)
+fly volumes create msc_data --size 1 --region ord
+fly secrets set MSC_DASH_PASSWORD=... SEC_USER_AGENT="Your Name you@example.com"
+fly deploy
+```
+
+One always-on machine runs the web server and the daily job (default 22:30 UTC, after the US close). A restart
+after that time catches up the missed run. SQLite lives on the volume. Keep a single machine: two would each have
+their own database.
+
+## Company names and industries
+
+The stock tables show each ticker's company name and industry (SEC's SIC description), looked up once from SEC EDGAR
+and cached in the database. A failed lookup leaves the cells blank rather than breaking the page.
+
+## Debugging a signal
+
+`fly ssh console -C "python -m msc pm-debug recession"` shows how many markets each prediction venue returned and
+which ones match a pattern, so you can tune `MSC_PM_RULES`. Each signal's dashboard row shows its last error.
+
+## Honest status
+
+- Written and tested against sample data only. The five live data sources have **not** been exercised against the
+  real services (the build environment could not reach them). Expect to fix field names or URLs on first run:
+  the dashboard shows each signal as `ok` or `error` with the message.
+- The starting state means, transition probabilities and P(up) per state are **assumptions**. Nothing here shows
+  an edge yet. It earns trust only through its stored, forward-scored forecasts.
+- Free social and news data are thin and crude (a small word list). They start with low influence for that reason.
+- FRED's CSV layout and series availability were not verified live (the parser accepts either header style). FRED may serve limited history for the ICE-sourced credit spread; the macro signals use whatever comes back (250 points minimum).
+- Live-confirmed on the first deploy: the FRED macro signals, SEC filings and RSS news work. Stooq returned no prices (the default is now FRED), Reddit returned no posts, and the prediction-market rules matched nothing.
+- Stooq's CSV endpoint and the Polymarket and Kalshi field names (from their public docs) were not verified live. Kalshi's docs show two hostnames; the code tries both. Kalshi prices are dollar strings (0 to 1); a market with no real quote is skipped.
+- Matching rules are plain text patterns. Kalshi and Polymarket word questions differently, so check the `levels` shown for each signal and adjust `MSC_PM_RULES` until it picks the markets you mean.
+- The per-stock layer reuses market-level signal reliability; stock-level reliability is not measured yet.
