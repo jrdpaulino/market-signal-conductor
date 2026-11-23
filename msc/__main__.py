@@ -95,8 +95,11 @@ def main(argv=None):
                                       cfg.run_hour_utc, cfg.run_minute_utc)
         try:
             server.serve_forever()
+        except KeyboardInterrupt:                      # Fly stops the app with SIGINT: exit quietly, not with a traceback
+            logging.getLogger("msc").info("shutting down")
         finally:
             stop.set()
+            server.server_close()
 
 
 if __name__ == "__main__":

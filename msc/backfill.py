@@ -2,8 +2,9 @@
 
 Only signals whose sources keep full history are replayed: the FRED macro series (yield curve, credit spread, VIX)
 and the S&P 500 trend. They already use only data dated on or before each day, so replaying a past day sees what
-was public then. The others (insider filings, prediction markets, news, social, anomaly flags) cannot be replayed
-without hindsight, so they are left out rather than faked.
+was public then. The others are left out rather than faked: prediction markets, news, social and anomaly flags keep no
+rewindable history. Insider filings (Form 4) could be replayed honestly by filing date, but a full replay is
+thousands of filings a day, so it is shelved until a bulk source is checked.
 
 Safeguards:
   * Everything goes into a SEPARATE database. The live track record, the weights and the trading gate never see it.

@@ -85,8 +85,9 @@ What keeps it honest:
   command refuses to write to the live file.
 - **No hindsight.** Each replayed day's reliability weights use only outcomes known by that day. The model is not
   re-fit on the replayed data, and its settings were not tuned on it.
-- **Only replayable signals.** Insider filings, prediction markets, news, social and `anomaly_flow` are left out:
-  their sources cannot be rewound, and faking them would put hindsight in.
+- **Only replayable signals.** Prediction markets, news, social and `anomaly_flow` are left out: their sources
+  cannot be rewound, and faking them would put hindsight in. Insider filings could be replayed by filing date
+  but are shelved for now (volume).
 
 How to read the output: `hit_rate` and the Brier score against the base rate are the numbers that matter;
 `gate_would_say` is informational only. Consecutive 20-day outcomes overlap, so the real sample is far smaller
