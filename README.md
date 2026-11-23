@@ -49,6 +49,7 @@ signals (plugins) --> observations --> Markov core --> dashboard
 | `journals_news` | RSS feeds (`MSC_RSS_FEEDS`): tone, discounted by speculative wording | nothing |
 | `macro_curve`, `macro_credit`, `macro_vix` | FRED free CSV downloads: yield-curve slope (T10Y2Y, T10Y3M), high-yield spread (BAMLH0A0HYM2), VIX (VIXCLS). Three signals so each earns its own weight | nothing |
 | `price_anchor` | S&P 500 closes from FRED (default; `MSC_PRICE_SOURCE=stooq` to switch): benchmark trend, anchors the cycle states. The same prices score every forecast | nothing |
+| `anomaly_flow` | Built from the other signals' stored data and the benchmark price: flags an unusually large one-day jump in prediction-market odds or benchmark price (z-score against its own recent history). Low confidence, runs last, logs each flagged event for later review. Does not see single options trades (that needs a paid feed) | nothing |
 
 ### Adding a signal
 

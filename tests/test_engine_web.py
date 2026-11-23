@@ -104,7 +104,8 @@ class EngineTests(unittest.TestCase):
     def test_builtin_signals_register(self):
         names = {s.name for s in load_signals(Config())}
         self.assertEqual(names, {"sec_filings", "prediction_markets", "social", "journals_news", "price_anchor",
-                                 "macro_curve", "macro_credit", "macro_vix"})
+                                 "macro_curve", "macro_credit", "macro_vix", "anomaly_flow"})
+        self.assertEqual([s.name for s in load_signals(Config())][-1], "anomaly_flow")   # runs after what it reads
 
 
 class WebTests(unittest.TestCase):

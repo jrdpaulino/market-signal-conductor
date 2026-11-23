@@ -22,6 +22,7 @@ class Signal:
     name = ""
     description = ""
     needs = ()               # names of settings or keys this signal requires, shown on the dashboard
+    runs_last = False        # True for a signal that reads other signals' stored data from the same day
 
     def collect(self, ctx):
         """Return a list of msc.models.Observation. Raise on failure; the engine records it as unhealthy."""
@@ -45,4 +46,5 @@ def load_signals(cfg):
     unknown = [n for n in names if n not in REGISTRY]
     if unknown:
         raise SystemExit(f"Unknown signals {unknown}; available: {sorted(REGISTRY)}")
-    return [REGISTRY[n]() for n in names]
+    sigs = [REGISTRY[n]() for n in names]
+    return sorted(sigs, key=lambda s: s.runs_last)      # stable: dependants run after the signals they read

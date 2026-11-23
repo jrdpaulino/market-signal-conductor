@@ -62,7 +62,7 @@ months. Anything before that is plumbing, not evidence.
 
 ## Roadmap
 
-**Now (built).** Eight signals across six sources: SEC Form 4 insider buying, Polymarket and Kalshi odds, RSS news
+**Now (built).** Nine signals across six sources: SEC Form 4 insider buying, Polymarket and Kalshi odds, RSS news
 tone, S&P 500 trend, and three FRED macro series. Layered Markov model, reliability weights, forecast scoring, the
 gate, a password-protected dashboard, daily scheduler with restart catch-up, Fly.io deployment.
 

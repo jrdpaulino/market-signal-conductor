@@ -65,4 +65,4 @@ GitHub pauses scheduled workflows after 60 days without repository activity, so 
 | `Error: app not found` on deploy | `app` in `fly.toml` does not match your app; edit it or pass `-a <name>` |
 | A signal shows `error` | Its row on the dashboard carries the reason; `fly logs --no-tail` for detail |
 | Prediction markets match nothing | `fly ssh console -C "python -m msc pm-debug recession"` shows what each venue returns; adjust `MSC_PM_RULES` |
-| `social` fails with 404 or 429 | Reddit blocks cloud hosts. Remove it: `fly secrets set MSC_SIGNALS=sec_filings,prediction_markets,journals_news,price_anchor,macro_curve,macro_credit,macro_vix` |
+| `social` fails with 404 or 429 | Reddit blocks cloud hosts. Remove it: `fly secrets set MSC_SIGNALS=sec_filings,prediction_markets,journals_news,price_anchor,macro_curve,macro_credit,macro_vix,anomaly_flow` |

@@ -306,3 +306,62 @@ class MacroTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AnomalyFlowTests(unittest.TestCase):
+    def _ctx(self, prices, day="2026-11-20"):
+        from msc.signals import anomaly_flow  # noqa: F401
+        c = ctx_for({}, day=day)
+        c.prices = lambda: prices
+        return c
+
+    def _calm_prices(self, n=90, last_move=0.0, end="2026-11-20"):
+        import random
+        rng, p, out, d = random.Random(3), 100.0, [], date.fromisoformat(end)
+        days = []
+        while len(days) < n:
+            if d.weekday() < 5:
+                days.append(d)
+            d -= timedelta(days=1)
+        for i, d in enumerate(reversed(days)):
+            p *= 1 + (last_move if i == n - 1 else rng.gauss(0, 0.005))
+            out.append((d.isoformat(), p, p))
+        return out
+
+    def test_quiet_day_is_not_flagged(self):
+        from msc.signals.anomaly_flow import AnomalyFlow
+        ctx = self._ctx(self._calm_prices(last_move=0.001))
+        obs = AnomalyFlow().collect(ctx)[0]
+        self.assertEqual((obs.score, obs.confidence), (0.0, 0.0))
+
+    def test_big_benchmark_gap_is_flagged_with_capped_confidence(self):
+        from msc.signals.anomaly_flow import AnomalyFlow
+        ctx = self._ctx(self._calm_prices(last_move=0.05))
+        obs = AnomalyFlow().collect(ctx)[0]
+        self.assertGreater(obs.score, 0)
+        self.assertLessEqual(obs.confidence, 0.5)
+        self.assertEqual(obs.meta["events"][0]["kind"], "benchmark_price")
+        self.assertIsNotNone(ctx.store.kv_get("anomaly:2026-11-20"))   # logged for later review
+
+    def test_prediction_market_jump_needs_history_and_size(self):
+        from msc.signals.anomaly_flow import AnomalyFlow, pm_flags
+        ctx = self._ctx(self._calm_prices(last_move=0.0))
+        end = date(2026, 11, 20)
+        for i in range(9, 0, -1):                                   # nine calm days, then a 15-point drop
+            ctx.store.kv_set(f"pm:polymarket:0:{(end - timedelta(days=i)).isoformat()}", 0.50 + 0.003 * (i % 2))
+        ctx.store.kv_set("pm:polymarket:0:2026-11-20", 0.35)
+        flags = pm_flags(ctx.store, "2026-11-20")
+        self.assertEqual(len(flags), 1)
+        self.assertLess(AnomalyFlow().collect(ctx)[0].score, 0)
+
+    def test_thin_pm_history_never_flags(self):
+        from msc.signals.anomaly_flow import pm_flags
+        ctx = self._ctx(self._calm_prices())
+        ctx.store.kv_set("pm:polymarket:0:2026-11-19", 0.50)
+        ctx.store.kv_set("pm:polymarket:0:2026-11-20", 0.20)
+        self.assertEqual(pm_flags(ctx.store, "2026-11-20"), [])
+
+    def test_stale_prices_are_not_todays_move(self):
+        from msc.signals.anomaly_flow import price_flag
+        prices = self._calm_prices(last_move=0.08, end="2026-11-10")
+        self.assertIsNone(price_flag(prices, "2026-11-20"))

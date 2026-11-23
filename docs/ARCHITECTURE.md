@@ -270,6 +270,7 @@ Wilson 95% lower bound on the hit rate above 0.5. No broker or order code exists
 | `social` | Reddit RSS | Tone of cashtag chatter (currently blocked from cloud hosts) |
 | `journals_news` | RSS feeds | Tone, discounted by speculative wording |
 | `price_anchor` | FRED SP500 | Benchmark trend, momentum and drawdown |
+| `anomaly_flow` | Stored prediction-market levels, FRED SP500 | Unusual one-day jumps (z-score vs the series' own recent changes); runs last; each flag is logged under kv `anomaly:<day>` |
 | `macro_curve`, `macro_credit`, `macro_vix` | FRED CSV downloads | Yield-curve slope, high-yield spread, VIX |
 
 A signal is any subclass of `Signal` that returns `Observation` objects, registered with `@register`. Extra modules
