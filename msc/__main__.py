@@ -28,6 +28,7 @@ def main(argv=None):
     r.add_argument("--day", help="ISO date, default today (UTC)")
     sub.add_parser("learn", help="re-fit the Markov model from stored history")
     sub.add_parser("signals", help="list registered signals")
+    sub.add_parser("overlap", help="which signals move together (the model treats them as independent)")
     sub.add_parser("status", help="print the current state as JSON")
     b = sub.add_parser("backfill", help="replay FRED macro + S&P 500 signals over past years into a separate database")
     b.add_argument("--start", help="ISO date, default: 5 years before --end")
@@ -49,6 +50,10 @@ def main(argv=None):
         print(json.dumps(cond.run_day(a.day), indent=2, default=str))
     elif a.cmd == "learn":
         print(json.dumps(cond.learn(), indent=2))
+    elif a.cmd == "overlap":
+        from .weights import signal_overlap
+        rows = signal_overlap(cond.store)
+        print(json.dumps(rows, indent=2) if rows else "not enough overlapping days yet (need 30)")
     elif a.cmd == "backfill":
         from datetime import date as _d
         from .backfill import backfill_path, run_backfill

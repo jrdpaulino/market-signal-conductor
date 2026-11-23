@@ -66,3 +66,23 @@ def compute_weights(store, prices, horizon, today):
 
 def _signals(store):
     return [r[0] for r in store._all("SELECT DISTINCT signal FROM observations WHERE scope='market'")]
+
+
+def signal_overlap(store, min_days=30):
+    """How closely the signals' daily market scores move together: [{a, b, n, corr}], strongest first.
+
+    The model multiplies signals as if independent, so two signals with high overlap partly count the same
+    evidence twice. This is a reading for the operator, not an input to the model."""
+    series = {}
+    for sig in sorted(_signals(store)):
+        series[sig] = {d: s for d, s, c in store.market_series(sig) if c > 0}
+    out, names = [], sorted(series)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            days = sorted(set(series[a]) & set(series[b]))
+            if len(days) < min_days:
+                continue
+            corr = pearson([series[a][d] for d in days], [series[b][d] for d in days])
+            if corr == corr:
+                out.append(dict(a=a, b=b, n=len(days), corr=round(corr, 3)))
+    return sorted(out, key=lambda r: -abs(r["corr"]))

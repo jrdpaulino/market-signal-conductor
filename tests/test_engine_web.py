@@ -307,3 +307,18 @@ class BackfillTests(unittest.TestCase):
         late = W.compute_weights(store, prices, 20, prices[299][0])
         self.assertLess(early["sig"][1], late["sig"][1])
         self.assertEqual(early["sig"][1], W.compute_weights(store, prices[:61], 20, prices[60][0])["sig"][1])
+
+
+class OverlapTests(unittest.TestCase):
+    def test_overlap_finds_signals_that_move_together(self):
+        from msc import weights as W
+        store = Store(os.path.join(tempfile.mkdtemp(), "t.sqlite"))
+        prices = make_prices(80)
+        for k, p in enumerate(prices):
+            x = (k % 7 - 3) / 3
+            store.put_obs([Observation("a", p[0], "market", "", x), Observation("b", p[0], "market", "", 0.9 * x + 0.01),
+                           Observation("c", p[0], "market", "", ((k * 5) % 11 - 5) / 5)])
+        rows = W.signal_overlap(store)
+        self.assertEqual((rows[0]["a"], rows[0]["b"]), ("a", "b"))
+        self.assertGreater(rows[0]["corr"], 0.95)
+        self.assertEqual(W.signal_overlap(store, min_days=500), [])

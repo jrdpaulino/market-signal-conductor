@@ -20,12 +20,14 @@ independent, so the effective sample is far smaller than the day count.
 import os
 from datetime import date
 
+from . import weights as W
 from .engine import Conductor
 from .execution.gate import check_gate
 from .signals import macro_fred, price_anchor  # noqa: F401  (registers them)
 from .signals.base import REGISTRY
 from .store import Store
 
+OVERLAP_FLAG = 0.6
 BACKFILL_SIGNALS = ("price_anchor", "macro_curve", "macro_credit", "macro_vix")
 
 
@@ -84,5 +86,7 @@ def report(cond, days, step):
                                corr=None if v["corr"] is None else round(v["corr"], 3))
                        for k, v in cond.store.latest_weights().items()},
         signal_days=health,
+        signal_overlap=[dict(r, note="moves closely with the other: partly double-counted") if abs(r["corr"]) >= OVERLAP_FLAG else r
+                        for r in W.signal_overlap(cond.store)],
         note="Information only: replayed data is kept apart and never counts toward the live gate.",
     )

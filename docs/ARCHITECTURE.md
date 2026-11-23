@@ -12,6 +12,7 @@ signals (plug-ins) --> observations --> Markov core --> store --> dashboard
  journals_news          or ticker            odds tilted by the regime belief
  price_anchor                              Reliability weights: each signal's influence comes from
  macro_curve / _credit / _vix                its record against what the market did next
+ anomaly_flow (runs last)
 ```
 
 One process does everything: a standard-library HTTP server for the dashboard and a background thread that runs the
@@ -50,6 +51,7 @@ class Signal {
   +name
   +description
   +needs
+  +runs_last
   +collect(ctx) list
 }
 class SecFilings
@@ -57,6 +59,7 @@ class PredictionMarkets
 class SocialChatter
 class JournalsNews
 class PriceAnchor
+class AnomalyFlow
 class MacroFred {
   curve, credit, vix
 }
@@ -119,6 +122,10 @@ class Scheduler {
   +loop()
   +is_due()
 }
+class Backfill {
+  +run_backfill()
+  +report()
+}
 class Dashboard {
   +serve()
   GET and POST routes
@@ -128,6 +135,7 @@ Signal <|-- PredictionMarkets
 Signal <|-- SocialChatter
 Signal <|-- JournalsNews
 Signal <|-- PriceAnchor
+Signal <|-- AnomalyFlow
 Signal <|-- MacroFred
 Venue <|-- Polymarket
 Venue <|-- Kalshi
@@ -150,6 +158,9 @@ Companies --> Store : cache
 Companies --> Http
 Scheduler --> Conductor : daily
 Dashboard --> Conductor : state, run now
+Backfill ..> Conductor : replays history
+Backfill --> Store : separate database
+AnomalyFlow ..> Store : reads prediction-market levels
 ```
 
 Config, Scheduler, Dashboard and EdgeGate are modules of functions in the code, drawn as classes for readability.
@@ -177,6 +188,7 @@ loop each registered signal
   C->>D: put_obs and set_health ok
 end
 Note over C,D: a failing signal is stored as error and skipped
+Note over C,G: signals that read other signals' stored data (anomaly_flow) run last
 C->>X: S&P 500 closes from FRED
 C->>C: update_weights using outcomes already known
 C->>D: set_weight per signal
@@ -276,6 +288,15 @@ Wilson 95% lower bound on the hit rate above 0.5. No broker or order code exists
 A signal is any subclass of `Signal` that returns `Observation` objects, registered with `@register`. Extra modules
 load through `MSC_EXTRA_MODULES`. See `msc/signals/_template.py`.
 
+## Backfill
+
+`python -m msc backfill` replays the replayable signals (FRED macro series and the S&P 500 trend) over past days
+through the same `Conductor`, into a separate database. It exists to show how the model would have done, not to
+feed the gate. Rules: the live database is never written; each replayed day's reliability weights use only
+outcomes known by that day (`compute_weights` ignores prices after the evaluation day); the model is not re-fit on
+the replayed data. The report also lists which signals move together (`signal_overlap`), because the model combines
+signals as if independent.
+
 ## Design decisions
 
 | Decision | Why | Cost |
@@ -285,5 +306,6 @@ load through `MSC_EXTRA_MODULES`. See `msc/signals/_template.py`.
 | In-process scheduler | No second service or cron host | The machine must stay running; restart catch-up covers gaps |
 | Basic auth with one password | Enough for one user | Not a multi-user system |
 | Plug-in signals with independent failure | Free sources break often | Every signal needs its own error text |
+| Signals combined as independent evidence | Simple and transparent; each signal has its own weight and regime means | Correlated signals partly double-count: the overlap report shows which |
 | Weights learned from outcomes, not set by hand | Keeps unproven signals quiet | Slow: needs months of data |
 | Gate in code, not policy | The evidence bar cannot be skipped by accident | Live trading needs a deliberate change |
