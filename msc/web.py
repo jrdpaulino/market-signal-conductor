@@ -95,8 +95,13 @@ def make_handler(conductor, cfg, run_lock):
                        {"WWW-Authenticate": 'Basic realm="Market Signal Conductor"'})
 
         def do_GET(self):
-            if self.path == "/healthz":                    # no auth: for the host's health checks, reveals nothing
-                return self._send(200, "ok", "text/plain")
+            if self.path == "/healthz":                    # no auth: health checks and uptime monitors; shows only the last run day
+                try:
+                    last = conductor.store.last_belief()
+                    last_run = last[0] if last else "never"
+                except Exception:
+                    last_run = "unknown"
+                return self._send(200, f"ok last_run={last_run}", "text/plain")
             if not self._authed():
                 return self._deny()
             if self.path in ("/", "/index.html"):

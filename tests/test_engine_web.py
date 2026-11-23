@@ -130,7 +130,11 @@ class WebTests(unittest.TestCase):
             return e.code, e.read().decode()
 
     def test_auth_required_except_health(self):
-        self.assertEqual(self.fetch("/healthz")[0], 200)
+        code, body = self.fetch("/healthz")
+        self.assertEqual(code, 200)
+        self.assertEqual(body, "ok last_run=never")
+        self.c.run_day("2026-01-05")
+        self.assertEqual(self.fetch("/healthz")[1], "ok last_run=2026-01-05")
         self.assertEqual(self.fetch("/")[0], 401)
         self.assertEqual(self.fetch("/api/state", "admin:wrong")[0], 401)
         self.assertEqual(self.fetch("/api/run", method="POST")[0], 401)

@@ -49,6 +49,14 @@ fly deploy --ha=false
 - **Backups:** `fly ssh sftp get /data/msc.sqlite`.
 - **Rotate the password:** `fly secrets set MSC_DASH_PASSWORD=<new>`. The machine restarts and keeps its data.
 
+## Uptime monitoring
+
+`/healthz` needs no password and answers `ok last_run=<date>`, the day of the latest daily run. The
+`.github/workflows/uptime.yml` workflow calls it every three hours and fails if the app is unreachable or the last run is
+more than two days old; GitHub emails you when a scheduled run fails. To turn it on, add a repository secret named
+`APP_URL` (Settings, Secrets and variables, Actions) set to your app's address, such as `https://your-app.fly.dev`.
+GitHub pauses scheduled workflows after 60 days without repository activity, so re-enable it if it stops.
+
 ## Troubleshooting
 
 | Symptom | Likely cause and fix |

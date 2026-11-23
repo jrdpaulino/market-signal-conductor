@@ -1,0 +1,24 @@
+name: uptime
+# Pings the deployed dashboard every three hours and fails if it is down or its last daily run is more than
+# two days old. A failed scheduled run emails the repository owner. Needs one repository secret, APP_URL
+# (for example https://your-app.fly.dev); without it the job skips, so forks do nothing.
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check /healthz
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ]; then echo "APP_URL secret not set; skipping"; exit 0; fi
+          body=$(curl -fsS --max-time 30 --retry 3 --retry-delay 10 "$APP_URL/healthz") || { echo "dashboard unreachable"; exit 1; }
+          echo "$body"
+          last=$(echo "$body" | sed -n 's/.*last_run=\([0-9-]*\).*/\1/p')
+          if [ -z "$last" ]; then echo "no daily run recorded yet ($body)"; exit 1; fi
+          age=$(( ( $(date -u +%s) - $(date -u -d "$last" +%s) ) / 86400 ))
+          if [ "$age" -gt 2 ]; then echo "last run $last is $age days old"; exit 1; fi
+          echo "ok: last run $last, $age day(s) ago"
