@@ -1,5 +1,8 @@
 # Market Signal Conductor
 
+<img width="1706" height="1148" alt="image" src="https://github.com/user-attachments/assets/3763413e-96a2-457a-9ca8-2f6783088d7b" />
+
+
 > **At a glance:** Python (standard library only), about 2,700 lines, 61 tests, deployed on Fly.io. A hidden Markov
 > model over a market cycle, plug-in data signals, outcome-based reliability weights and a coded evidence gate
 > before any trading. [Vision](VISION.md) | [Architecture](docs/ARCHITECTURE.md) | [Operations](docs/OPERATIONS.md)
