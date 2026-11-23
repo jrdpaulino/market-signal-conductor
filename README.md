@@ -98,3 +98,7 @@ which ones match a pattern, so you can tune `MSC_PM_RULES`. Each signal's dashbo
   so check the `levels` shown for each signal and adjust `MSC_PM_RULES` when titles change.
 - The per-stock layer reuses market-level signal reliability; stock-level reliability is not measured yet.
 - This is a research tool, not financial advice.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
