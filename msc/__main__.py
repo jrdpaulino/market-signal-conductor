@@ -6,7 +6,7 @@ import threading
 
 from . import scheduler, web
 from .config import Config, load_dotenv
-from .engine import Conductor
+from .engine import Conductor, today_utc
 from .http import Http
 from .prices import FredPrices, StooqPrices
 from .signals.base import load_signals
@@ -29,6 +29,11 @@ def main(argv=None):
     sub.add_parser("learn", help="re-fit the Markov model from stored history")
     sub.add_parser("signals", help="list registered signals")
     sub.add_parser("status", help="print the current state as JSON")
+    b = sub.add_parser("backfill", help="replay FRED macro + S&P 500 signals over past years into a separate database")
+    b.add_argument("--start", help="ISO date, default: 5 years before --end")
+    b.add_argument("--end", help="ISO date, default: today")
+    b.add_argument("--step", type=int, default=1, help="replay every Nth trading day (default 1)")
+    b.add_argument("--db", help="output database, default: <MSC_DB>.backfill.sqlite")
     d = sub.add_parser("pm-debug", help="show what each prediction-market venue returns for a search pattern")
     d.add_argument("pattern", nargs="?", default="recession|rate cut|fed")
     a = ap.parse_args(argv)
@@ -44,9 +49,18 @@ def main(argv=None):
         print(json.dumps(cond.run_day(a.day), indent=2, default=str))
     elif a.cmd == "learn":
         print(json.dumps(cond.learn(), indent=2))
+    elif a.cmd == "backfill":
+        from datetime import date as _d
+        from .backfill import backfill_path, run_backfill
+        end = a.end or today_utc()
+        start = a.start or _d.fromisoformat(end).replace(year=_d.fromisoformat(end).year - 5).isoformat()
+        out = a.db or backfill_path(cfg)
+        print(f"replaying {start} .. {end} into {out} (the live database is not touched)")
+        result = run_backfill(cfg, cond.http, cond.prices, start, end, out, max(1, a.step),
+                              progress=lambda i, n, d: print(f"  {i}/{n} days, at {d}"))
+        print(json.dumps(result, indent=2, default=str))
     elif a.cmd == "pm-debug":
         import re
-        from .engine import today_utc
         from .signals.base import Context
         from .signals.prediction_markets import PredictionMarkets
         ctx = Context(today_utc(), cfg, cond.http, cond.store, None)

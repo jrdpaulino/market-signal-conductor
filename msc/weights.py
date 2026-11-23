@@ -49,6 +49,8 @@ def weight_from_pairs(scores, returns):
 def compute_weights(store, prices, horizon, today):
     """{signal: (weight, n_pairs, corr)} from outcomes known as of `today`."""
     out = {}
+    if prices:
+        prices = [p for p in prices if p[0] <= today]        # an outcome is known only once its last price is in the past
     for sig in {o for o in _signals(store)}:
         xs, ys = [], []
         for day, score, _conf in store.market_series(sig):

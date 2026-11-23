@@ -51,6 +51,8 @@ signals (plugins) --> observations --> Markov core --> dashboard
 | `price_anchor` | S&P 500 closes from FRED (default; `MSC_PRICE_SOURCE=stooq` to switch): benchmark trend, anchors the cycle states. The same prices score every forecast | nothing |
 | `anomaly_flow` | Built from the other signals' stored data and the benchmark price: flags an unusually large one-day jump in prediction-market odds or benchmark price (z-score against its own recent history). Low confidence, runs last, logs each flagged event for later review. Does not see single options trades (that needs a paid feed) | nothing |
 
+To see how the model would have done on past data, run `python -m msc backfill` (macro series and S&P 500 only, kept in a separate database, never counted toward the gate). See `docs/OPERATIONS.md`.
+
 ### Adding a signal
 
 Copy `msc/signals/_template.py`, implement `collect()`, set `MSC_EXTRA_MODULES=your.module`. Paid sources

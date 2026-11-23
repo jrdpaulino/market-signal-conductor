@@ -6,6 +6,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from datetime import date, timedelta
 
 from msc import web
 from msc.config import Config
@@ -248,3 +249,61 @@ class CompanyTests(unittest.TestCase):
         c.run_day(day(0))
         row = c.state()["tilts"]["strongest"][0]
         self.assertEqual((row["company"], row["industry"]), ("Apple Inc.", "Electronic Computers"))
+
+
+class BackfillTests(unittest.TestCase):
+    """Replay on synthetic FRED data: separate database, no look-ahead, honest report."""
+
+    @staticmethod
+    def _csv(series, n=1400, base=1.0, wobble=0.5):
+        import math as _m
+        d, rows = date(2019, 1, 1), ["observation_date," + series]
+        while len(rows) <= n:
+            if d.weekday() < 5:
+                rows.append(f"{d.isoformat()},{base + wobble * _m.sin(len(rows) / 40):.4f}")
+            d += timedelta(days=1)
+        return "\n".join(rows)
+
+    def _http(self):
+        sp = self._csv("SP500", base=3000, wobble=300)
+        data = {"SP500": sp, "T10Y2Y": self._csv("T10Y2Y"), "T10Y3M": self._csv("T10Y3M"),
+                "BAMLH0A0HYM2": self._csv("BAMLH0A0HYM2", base=4), "VIXCLS": self._csv("VIXCLS", base=18, wobble=6)}
+
+        class H:
+            calls = 0
+
+            def get(_s, url, params=None, **kw):
+                H.calls += 1
+                return data[params["id"]]
+        return H
+
+    def test_replay_is_separate_cached_and_reported(self):
+        from msc.backfill import backfill_path, run_backfill
+        from msc.prices import FredPrices
+        H = self._http()
+        http = H()
+        cfg = Config(db_path=os.path.join(tempfile.mkdtemp(), "live.sqlite"))
+        prices = FredPrices(http)
+        out = backfill_path(cfg)
+        self.assertTrue(out.endswith("live.backfill.sqlite"))
+        all_days = [d for d, _o, _c in prices()]
+        res = run_backfill(cfg, http, prices, all_days[600], all_days[-1], out, step=7)
+        self.assertGreater(res["days_replayed"], 50)
+        self.assertGreater(res["scored_forecasts"], 20)
+        self.assertEqual(set(res["final_weights"]) - {"price_anchor", "macro_curve", "macro_credit", "macro_vix"}, set())
+        self.assertLess(H.calls, 12)                      # five FRED series fetched once each, not once per day
+        self.assertFalse(os.path.exists(cfg.db_path))     # the live database is untouched
+        self.assertIn("never counts toward the live gate", res["note"])
+        with self.assertRaises(ValueError):
+            run_backfill(cfg, http, prices, all_days[600], all_days[-1], cfg.db_path)
+
+    def test_weights_ignore_prices_after_the_evaluation_day(self):
+        from msc import weights as W
+        store = Store(os.path.join(tempfile.mkdtemp(), "t.sqlite"))
+        prices = make_prices(300)
+        for k in range(100):
+            store.put_obs([Observation("sig", prices[k][0], "market", "", 0.3 if k % 2 else -0.3)])
+        early = W.compute_weights(store, prices, 20, prices[60][0])      # only ~39 outcomes were known by day 60
+        late = W.compute_weights(store, prices, 20, prices[299][0])
+        self.assertLess(early["sig"][1], late["sig"][1])
+        self.assertEqual(early["sig"][1], W.compute_weights(store, prices[:61], 20, prices[60][0])["sig"][1])

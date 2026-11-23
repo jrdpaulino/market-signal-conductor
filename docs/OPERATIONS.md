@@ -66,3 +66,29 @@ GitHub pauses scheduled workflows after 60 days without repository activity, so 
 | A signal shows `error` | Its row on the dashboard carries the reason; `fly logs --no-tail` for detail |
 | Prediction markets match nothing | `fly ssh console -C "python -m msc pm-debug recession"` shows what each venue returns; adjust `MSC_PM_RULES` |
 | `social` fails with 404 or 429 | Reddit blocks cloud hosts. Remove it: `fly secrets set MSC_SIGNALS=sec_filings,prediction_markets,journals_news,price_anchor,macro_curve,macro_credit,macro_vix,anomaly_flow` |
+
+## Backfill: replaying history
+
+`python -m msc backfill` replays the signals that can be rebuilt honestly from past data (the three FRED macro
+series and the S&P 500 trend) day by day, and reports how the model would have done.
+
+```
+python -m msc backfill --start 2021-01-01 --end 2026-11-20
+```
+
+Options: `--step 5` (every 5th trading day, faster), `--db path` (output file; default `<MSC_DB>.backfill.sqlite`).
+It needs the same internet access as a normal run and takes a few minutes for five years.
+
+What keeps it honest:
+
+- **Separate database.** The live database, the live weights and the trading gate never see replayed data. The
+  command refuses to write to the live file.
+- **No hindsight.** Each replayed day's reliability weights use only outcomes known by that day. The model is not
+  re-fit on the replayed data, and its settings were not tuned on it.
+- **Only replayable signals.** Insider filings, prediction markets, news, social and `anomaly_flow` are left out:
+  their sources cannot be rewound, and faking them would put hindsight in.
+
+How to read the output: `hit_rate` and the Brier score against the base rate are the numbers that matter;
+`gate_would_say` is informational only. Consecutive 20-day outcomes overlap, so the real sample is far smaller
+than `scored_forecasts` suggests, and a few years is one market history. A pass here would be a reason to keep
+collecting live evidence, not a reason to trade.
