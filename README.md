@@ -1,5 +1,8 @@
 # Market Signal Conductor
 
+<img width="1711" height="1009" alt="image" src="https://github.com/user-attachments/assets/63078537-4d20-4113-b20c-d350fb24691e" />
+
+
 <img width="1706" height="1148" alt="image" src="https://github.com/user-attachments/assets/3763413e-96a2-457a-9ca8-2f6783088d7b" />
 
 
