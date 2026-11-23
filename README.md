@@ -7,7 +7,7 @@
 ![Strongest and weakest stocks with company and industry](docs/img/dashboard-stocks.png)
 
 
-> **At a glance:** Python (standard library only), about 2100 lines, 69 tests, deployed on Fly.io. A hidden Markov
+> **At a glance:** Python (standard library only), about 3000 lines including tests, 69 tests, deployed on Fly.io. A hidden Markov
 > model over a market cycle, plug-in data signals, outcome-based reliability weights and a coded evidence gate
 > before any trading. [Vision](VISION.md) | [Architecture](docs/ARCHITECTURE.md) | [Operations](docs/OPERATIONS.md)
 
