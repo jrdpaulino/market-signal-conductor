@@ -1,5 +1,9 @@
 # Market Signal Conductor
 
+> **At a glance:** Python (standard library only), about 2,700 lines, 61 tests, deployed on Fly.io. A hidden Markov
+> model over a market cycle, plug-in data signals, outcome-based reliability weights and a coded evidence gate
+> before any trading. [Vision](VISION.md) | [Architecture](docs/ARCHITECTURE.md) | [Operations](docs/OPERATIONS.md)
+
 A web service that gathers market signals every day, feeds them into a layered Markov cycle model, and shows the
 result on a password-protected dashboard. It runs on a host, so it keeps working when your computer is off.
 
@@ -81,14 +85,16 @@ which ones match a pattern, so you can tune `MSC_PM_RULES`. Each signal's dashbo
 
 ## Honest status
 
-- Written and tested against sample data only. The five live data sources have **not** been exercised against the
-  real services (the build environment could not reach them). Expect to fix field names or URLs on first run:
-  the dashboard shows each signal as `ok` or `error` with the message.
-- The starting state means, transition probabilities and P(up) per state are **assumptions**. Nothing here shows
-  an edge yet. It earns trust only through its stored, forward-scored forecasts.
+- **Live-confirmed on a real deployment:** FRED macro signals, SEC Form 4 filings, RSS news, S&P 500 prices from
+  FRED, and Polymarket and Kalshi market data (the rules were tuned against what both venues actually return).
+- **Not working:** the Reddit `social` signal. Reddit blocks cloud hosts (404 and 429), so it is switched off in
+  the deployment.
+- **No edge has been shown.** The starting state means, transition probabilities and P(up) per state are
+  assumptions. The system earns trust only through its stored, forward-scored forecasts. The first scores need 20
+  trading days and the gate needs 60, so expect about four months before there is anything to judge. Earlier
+  insider-copytrading and multi-signal backtests found no edge, which is why the track record is the product.
 - Free social and news data are thin and crude (a small word list). They start with low influence for that reason.
-- FRED's CSV layout and series availability were not verified live (the parser accepts either header style). FRED may serve limited history for the ICE-sourced credit spread; the macro signals use whatever comes back (250 points minimum).
-- Live-confirmed on the first deploy: the FRED macro signals, SEC filings and RSS news work. Stooq returned no prices (the default is now FRED), Reddit returned no posts, and the prediction-market rules matched nothing.
-- Stooq's CSV endpoint and the Polymarket and Kalshi field names (from their public docs) were not verified live. Kalshi's docs show two hostnames; the code tries both. Kalshi prices are dollar strings (0 to 1); a market with no real quote is skipped.
-- Matching rules are plain text patterns. Kalshi and Polymarket word questions differently, so check the `levels` shown for each signal and adjust `MSC_PM_RULES` until it picks the markets you mean.
+- Prediction-market rules are plain text patterns with exclusions. Kalshi and Polymarket word questions differently,
+  so check the `levels` shown for each signal and adjust `MSC_PM_RULES` when titles change.
 - The per-stock layer reuses market-level signal reliability; stock-level reliability is not measured yet.
+- This is a research tool, not financial advice.
