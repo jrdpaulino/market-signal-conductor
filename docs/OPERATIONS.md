@@ -109,6 +109,15 @@ lower is better), `resolution` (discrimination, higher is better) and `brier_if_
 overall level were corrected). A model can lose to the base rate purely because its average is off, with no signal
 problem at all; this shows which case you are in.
 
+Other targets: `--target direction|drawdown|vol_down` and `--horizon N` replay the same signals against a different
+question. Every target is a yes/no outcome where "yes" is the good side, so the weights, calibration, Brier
+score and placebo all work unchanged. `direction` is up over the horizon; `drawdown` is no close falling more than 3%
+below today's close (the threshold is fixed in advance on purpose); `vol_down` is realized volatility over the next
+horizon lower than over the last. These change only that replay, never the live forecast. The report names the
+target. The assumed P(up) per regime is tuned for direction, so for other targets read the Brier score against
+the running base rate, which the calibration step fits to the real level. Example:
+`python -m msc backfill --start 2021-01-01 --target drawdown`.
+
 Two yardsticks: `brier_base_rate` uses the whole period's up-rate (hindsight, nothing can know it in advance);
 `brier_running_base_rate` uses only outcomes already known at each forecast date, which is what a naive forecaster
 could really have said. Beating the running one is the fairer test; the gate still uses the hindsight one.

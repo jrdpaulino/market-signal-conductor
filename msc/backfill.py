@@ -125,7 +125,8 @@ def report(cond, days, step, refit_every=0, refits=0, placebo=200):
     for row in cond.store._all("SELECT signal, status, COUNT(*) FROM signal_health GROUP BY signal, status"):
         health.setdefault(row[0], {})[row[1]] = row[2]
     return dict(
-        first_day=days[0], last_day=days[-1], days_replayed=len(days), step_days=step, horizon=cond.cfg.horizon,
+        first_day=days[0], last_day=days[-1], days_replayed=len(days), step_days=step, horizon=cond.cfg.horizon, target=cond.cfg.target,
+        target_means=W.TARGET_HELP[cond.cfg.target],
         walk_forward_refit=dict(every_days=refit_every, refits_done=refits) if refit_every else "off",
         scored_forecasts=track["n"], hit_rate=track["hit_rate"], brier=track["brier"],
         brier_base_rate=track["brier_base"], brier_running_base_rate=track.get("brier_running"),
@@ -139,7 +140,7 @@ def report(cond, days, step, refit_every=0, refits=0, placebo=200):
         brier_breakdown=brier_decomposition(cond.scored_forecasts()),
         brier_breakdown_raw=brier_decomposition(cond.scored_forecasts(raw=True)),
         calibration_now=cond.store.kv_get("calib"),
-        placebo=W.placebo_test(cond.store, cond.price_history(), cond.cfg.horizon, placebo) if placebo else "off",
+        placebo=W.placebo_test(cond.store, cond.price_history(), cond.cfg.horizon, placebo, target=cond.cfg.target) if placebo else "off",
         signal_days=health, signal_errors=signal_errors(cond.store), commit=commit_id(),
         signal_overlap=[dict(r, note="moves closely with the other: partly double-counted") if abs(r["corr"]) >= OVERLAP_FLAG else r
                         for r in W.signal_overlap(cond.store)],

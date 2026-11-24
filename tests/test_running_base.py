@@ -143,3 +143,61 @@ class SpeedupEquivalenceTests(unittest.TestCase):
             s.kv_set("k", 1)
             self.assertEqual(s.kv_get("k"), 1)
             s.close()
+
+
+class TargetTests(unittest.TestCase):
+    def _prices(self, closes):
+        import datetime as dt
+        d, out = dt.date(2026, 1, 1), []
+        for c in closes:
+            while d.weekday() >= 5:
+                d += dt.timedelta(days=1)
+            out.append((d.isoformat(), c, c))
+            d += dt.timedelta(days=1)
+        return out
+
+    def test_direction_unchanged(self):
+        from msc import weights as W
+        pr = self._prices([100, 100, 101, 102, 103, 104, 105])
+        self.assertAlmostEqual(W.forward_return(pr, pr[0][0], 3), 102 / 100 - 1)           # next open (100) to the close three days on (102)
+        self.assertEqual(W.forward_returns(pr, [pr[0][0]], 3), W.forward_returns(pr, [pr[0][0]], 3, "direction"))
+
+    def test_drawdown_flags_a_fall_of_more_than_the_threshold(self):
+        from msc import weights as W
+        calm = self._prices([100, 100.5, 101, 100.8, 101.2, 101.5])
+        rough = self._prices([100, 99, 96, 97, 98, 99])             # closes 4% below the start
+        self.assertEqual(W.forward_return(calm, calm[0][0], 4, "drawdown"), 1.0)
+        self.assertEqual(W.forward_return(rough, rough[0][0], 4, "drawdown"), -1.0)
+        self.assertIsNone(W.forward_return(calm, calm[-1][0], 4, "drawdown"))      # outcome not known yet
+
+    def test_vol_down_compares_next_window_with_last_window(self):
+        from msc import weights as W
+        wild_then_calm = self._prices([100, 105, 99, 106, 98, 100, 100.1, 100.2, 100.1, 100.2, 100.15])
+        calm_then_wild = self._prices([100, 100.1, 100.2, 100.1, 100.2, 100.15, 106, 98, 107, 97, 105])
+        self.assertEqual(W.forward_return(wild_then_calm, wild_then_calm[5][0], 5, "vol_down"), 1.0)
+        self.assertEqual(W.forward_return(calm_then_wild, calm_then_wild[5][0], 5, "vol_down"), -1.0)
+        self.assertIsNone(W.forward_return(wild_then_calm, wild_then_calm[2][0], 5, "vol_down"))   # not a full window of history
+
+    def test_vol_down_does_not_use_prices_past_the_horizon(self):
+        from msc import weights as W
+        pr = self._prices([100, 101, 99, 102, 98, 101, 100.5, 100.4, 100.6, 100.5, 100.55])
+        a = W.forward_return(pr, pr[5][0], 5, "vol_down")
+        b = W.forward_return(pr[:11], pr[5][0], 5, "vol_down")
+        self.assertEqual(a, b)
+
+    def test_unknown_target_is_rejected(self):
+        from msc import weights as W
+        with self.assertRaises(ValueError):
+            W.forward_returns(self._prices([1, 2, 3]), ["2026-01-01"], 1, "moon")
+
+    def test_backfill_runs_on_a_research_target(self):
+        from dataclasses import replace
+        from msc.backfill import backfill_path, run_backfill
+        from tests.test_engine_web import BackfillExtrasTests
+        t = BackfillExtrasTests("test_walk_forward_refit_runs_and_reports_the_breakdown")
+        cfg, http, prices, days = t._setup()
+        res = run_backfill(replace(cfg, target="drawdown"), http, prices, days[600], days[-1], backfill_path(cfg), step=9,
+                           placebo=20)
+        self.assertEqual(res["target"], "drawdown")
+        self.assertGreater(res["scored_forecasts"], 20)
+        self.assertIn("falls more than", res["target_means"])

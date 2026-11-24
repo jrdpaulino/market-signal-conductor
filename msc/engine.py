@@ -110,19 +110,19 @@ class Conductor:
 
     def update_weights(self, day):
         prices = self.price_history()
-        computed = W.compute_weights(self.store, prices, self.cfg.horizon, day)
+        computed = W.compute_weights(self.store, prices, self.cfg.horizon, day, self.cfg.target)
         for sig, (w, n, corr) in computed.items():
             self.store.set_weight(day, sig, w, n, corr if corr == corr else None)
         return computed
 
     def outcome_of(self, day, horizon):
-        r = W.forward_return(self.price_history(), day, horizon)
+        r = W.forward_return(self.price_history(), day, horizon, self.cfg.target)
         return None if r is None else int(r > 0)
 
     def track(self):
         prices = self.price_history()
         return track_record(self.store.forecasts(), lambda d, h: (
-            None if (r := W.forward_return(prices, d, h)) is None else int(r > 0)),
+            None if (r := W.forward_return(prices, d, h, self.cfg.target)) is None else int(r > 0)),
             exit_of=lambda d, h: W.forward_exit_days(prices, [d], h)[0])
 
     def scored_forecasts(self, raw=False):
@@ -132,7 +132,7 @@ class Conductor:
         rows = self.store.forecasts()
         raws = self.store.kv_prefix("praw:") if raw else {}
         out = []
-        for (d, _h, p, _r), r in zip(rows, W.forward_returns(prices, [x[0] for x in rows], self.cfg.horizon)):
+        for (d, _h, p, _r), r in zip(rows, W.forward_returns(prices, [x[0] for x in rows], self.cfg.horizon, self.cfg.target)):
             if r is not None:
                 out.append((raws.get(f"praw:{d}", p) if raw else p, int(r > 0)))
         return out
@@ -143,7 +143,7 @@ class Conductor:
         rows = [x for x in self.store.forecasts() if x[0] < day]
         raws = self.store.kv_prefix("praw:")
         pairs = [(raws.get(f"praw:{d}", p), int(r > 0))
-                 for (d, _h, p, _r), r in zip(rows, W.forward_returns(prices, [x[0] for x in rows], self.cfg.horizon))
+                 for (d, _h, p, _r), r in zip(rows, W.forward_returns(prices, [x[0] for x in rows], self.cfg.horizon, self.cfg.target))
                  if r is not None]
         return fit_calibration(pairs, self.cfg.horizon)
 
@@ -167,7 +167,7 @@ class Conductor:
         ups, gs = [], []
         prices = [p for p in self.price_history() if as_of is None or p[0] <= as_of]
         for (d, _o), g in zip(seq, gammas):
-            r = W.forward_return(prices, d, self.cfg.horizon)
+            r = W.forward_return(prices, d, self.cfg.horizon, self.cfg.target)
             if r is not None:
                 ups.append(int(r > 0))
                 gs.append(g)

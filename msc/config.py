@@ -56,6 +56,7 @@ class Config:
     kalshi_series: tuple = DEFAULT_KALSHI_SERIES
     price_source: str = "fred"          # "fred" (S&P 500 closes, default) or "stooq"
     price_symbol: str = "spy.us"        # Stooq symbol for the market anchor and for scoring
+    target: str = "direction"          # what is forecast: direction, drawdown or vol_down (research targets, see weights.TARGETS)
     horizon: int = 20                   # trading days ahead that forecasts refer to
     calibrate: bool = True              # pull P(up) toward the track record (MSC_CALIBRATE=0 turns it off)
     run_hour_utc: int = 22
@@ -83,6 +84,7 @@ class Config:
             price_source=g("MSC_PRICE_SOURCE", "fred").lower(),
             price_symbol=g("MSC_PRICE_SYMBOL", "spy.us"),
             horizon=int(g("MSC_HORIZON", "20")),
+            target=g("MSC_TARGET", "direction"),
             calibrate=g("MSC_CALIBRATE", "1") != "0",
             run_hour_utc=int(g("MSC_RUN_HOUR_UTC", "22")),
             run_minute_utc=int(g("MSC_RUN_MINUTE_UTC", "30")),

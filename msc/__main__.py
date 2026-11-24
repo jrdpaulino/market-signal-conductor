@@ -23,7 +23,7 @@ def build(cfg):
 def backfill_summary(name, r):
     pl = r.get("placebo")
     best = pl["results"][0] if isinstance(pl, dict) and pl.get("results") else None
-    return (f"[{name}] commit {r.get('commit')}  forecasts {r['scored_forecasts']}  hit {r['hit_rate']:.3f}  "
+    return (f"[{name}] commit {r.get('commit')}  target {r.get('target', 'direction')} {r.get('horizon', '')}d  forecasts {r['scored_forecasts']}  hit {r['hit_rate']:.3f}  "
             f"brier {r['brier']:.4f}  running base {r['brier_running_base_rate']:.4f}  hindsight base {r['brier_base_rate']:.4f}  "
             f"gate {r['gate_would_say']}"
             + (f"  best placebo p {best['p']} ({best['signal']})" if best else ""))
@@ -46,6 +46,8 @@ def main(argv=None):
     b.add_argument("--step", type=int, default=1, help="replay every Nth trading day (default 1)")
     b.add_argument("--db", help="output database, default: <MSC_DB>.backfill.sqlite")
     b.add_argument("--refit-every", type=int, default=0, help="walk-forward re-fit of the model every N replayed days, after the first 120 (0 = never)")
+    b.add_argument("--target", default=None, help="what to forecast: direction (default), drawdown or vol_down")
+    b.add_argument("--horizon", type=int, default=None, help="trading days ahead (default: MSC_HORIZON, 20)")
     b.add_argument("--placebo", type=int, default=200, help="time-rotated placebo copies of each signal to compare against (0 = skip)")
     b.add_argument("--compare", action="store_true", help="run twice (no re-fit, then re-fit every 63 days) and compare")
     d = sub.add_parser("pm-debug", help="show what each prediction-market venue returns for a search pattern")
@@ -69,7 +71,14 @@ def main(argv=None):
         print(json.dumps(rows, indent=2) if rows else "not enough overlapping days yet (need 30)")
     elif a.cmd == "backfill":
         from datetime import date as _d
+        from dataclasses import replace
         from .backfill import backfill_path, run_backfill
+        from .weights import TARGETS
+        if a.target is not None and a.target not in TARGETS:
+            ap.error(f"--target must be one of {', '.join(TARGETS)}")
+        if a.target is not None or a.horizon is not None:      # research variants only change this replay, never the live setting
+            cfg = replace(cfg, target=a.target or cfg.target, horizon=a.horizon or cfg.horizon)
+            cond = build(cfg)
         end = a.end or today_utc()
         start = a.start or _d.fromisoformat(end).replace(year=_d.fromisoformat(end).year - 5).isoformat()
         out = a.db or backfill_path(cfg)
