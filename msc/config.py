@@ -54,7 +54,8 @@ class Config:
     pm_rules: tuple = ()
     pm_venues: tuple = ("polymarket", "kalshi")
     kalshi_series: tuple = DEFAULT_KALSHI_SERIES
-    price_source: str = "fred"          # "fred" (S&P 500 closes, default) or "stooq"
+    price_source: str = "fred"          # "fred" (S&P 500 closes, default), "stooq", or "file" (see price_file)
+    price_file: str = ""                # CSV you downloaded (Date, Close, optional Open) when price_source is "file"
     price_symbol: str = "spy.us"        # Stooq symbol for the market anchor and for scoring
     target: str = "direction"          # what is forecast: direction, drawdown or vol_down (research targets, see weights.TARGETS)
     horizon: int = 20                   # trading days ahead that forecasts refer to
@@ -82,6 +83,7 @@ class Config:
             pm_venues=tuple(_list(g("MSC_PM_VENUES", "polymarket,kalshi"))),
             kalshi_series=tuple(_list(g("MSC_KALSHI_SERIES", ",".join(DEFAULT_KALSHI_SERIES)))),
             price_source=g("MSC_PRICE_SOURCE", "fred").lower(),
+            price_file=g("MSC_PRICE_FILE", ""),
             price_symbol=g("MSC_PRICE_SYMBOL", "spy.us"),
             horizon=int(g("MSC_HORIZON", "20")),
             target=g("MSC_TARGET", "direction"),

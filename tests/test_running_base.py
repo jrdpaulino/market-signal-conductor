@@ -234,3 +234,40 @@ class SplitAndLongCreditTests(unittest.TestCase):
         from msc.signals.base import REGISTRY
         self.assertIn("macro_credit_long", REGISTRY)
         self.assertIn("macro_credit_long", BACKFILL_SIGNALS)
+
+
+class FilePriceTests(unittest.TestCase):
+    def test_parses_stooq_and_yahoo_style_files(self):
+        from msc.prices import parse_price_csv
+        stooq = "Date,Open,High,Low,Close,Volume\n2026-01-02,100,101,99,100.5,1\n2026-01-05,100.5,102,100,101,1\n"
+        self.assertEqual(parse_price_csv(stooq), [("2026-01-02", 100.0, 100.5), ("2026-01-05", 100.5, 101.0)])
+        close_only = "Date,Close\n2026-01-05,10\n2026-01-02,9\nnot,a row\n2026-01-06,\n"
+        self.assertEqual(parse_price_csv(close_only), [("2026-01-02", 9.0, 9.0), ("2026-01-05", 10.0, 10.0)])
+        fred = "observation_date,Close\n2026-01-02,7\n"
+        self.assertEqual(parse_price_csv(fred), [("2026-01-02", 7.0, 7.0)])
+
+    def test_bad_header_is_explained(self):
+        from msc.prices import parse_price_csv
+        with self.assertRaises(ValueError):
+            parse_price_csv("a,b\n1,2\n")
+
+    def test_file_source_reads_and_rereads_on_change(self):
+        import tempfile, time
+        from msc.prices import FilePrices
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "px.csv")
+            open(p, "w").write("Date,Close\n2026-01-02,1\n")
+            fp = FilePrices(p)
+            self.assertEqual(len(fp()), 1)
+            open(p, "w").write("Date,Close\n2026-01-02,1\n2026-01-05,2\n")
+            os.utime(p, (time.time() + 5, time.time() + 5))
+            self.assertEqual(len(fp()), 2)
+
+    def test_empty_price_source_gives_a_clear_error(self):
+        from msc.backfill import backfill_path, run_backfill
+        from tests.test_engine_web import BackfillExtrasTests
+        t = BackfillExtrasTests("test_walk_forward_refit_runs_and_reports_the_breakdown")
+        cfg, http, prices, days = t._setup()
+        with self.assertRaises(RuntimeError) as cm:
+            run_backfill(cfg, http, lambda: [], "2020-01-01", "2021-01-01", backfill_path(cfg))
+        self.assertIn("MSC_PRICE_FILE", str(cm.exception))

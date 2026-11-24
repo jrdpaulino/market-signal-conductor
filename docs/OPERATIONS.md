@@ -123,7 +123,7 @@ where the ICE high-yield spread only goes back about three years. It overlaps `m
 without the other use `--signals price_anchor,macro_curve,macro_credit_long,macro_vix,macro_labor`. `--split N` also scores N
 consecutive slices of the history on their own (hit rate, Brier against the running base rate, each signal's link
 and placebo p inside the slice) and reports whether each signal keeps its sign in every slice. The default price
-source (FRED) has only about ten years of S&P history; for longer replays set `MSC_PRICE_SOURCE=stooq`.
+source (FRED) has only about ten years of S&P history. Stooq may refuse downloads without a key, in which case the replay stops with a clear message. For longer replays download daily prices yourself (a CSV with Date and Close columns, Open optional; Stooq, Yahoo Finance and brokers all export one) and set `MSC_PRICE_SOURCE=file` and `MSC_PRICE_FILE=C:\\path\\spx.csv`.
 Example: `python -m msc backfill --start 1995-01-01 --split 3`.
 
 Two yardsticks: `brier_base_rate` uses the whole period's up-rate (hindsight, nothing can know it in advance);

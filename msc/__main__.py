@@ -9,14 +9,21 @@ from .config import Config, load_dotenv
 from .engine import Conductor, today_utc
 from .http import Http
 from .logs import write_log
-from .prices import FredPrices, StooqPrices
+from .prices import FilePrices, FredPrices, StooqPrices
 from .signals.base import load_signals
 from .store import Store
 
 
 def build(cfg):
     http = Http()
-    prices = StooqPrices(http, cfg.price_symbol) if cfg.price_source == "stooq" else FredPrices(http)
+    if cfg.price_source == "file":
+        if not cfg.price_file:
+            raise SystemExit("MSC_PRICE_SOURCE=file needs MSC_PRICE_FILE=<path to a Date,Close CSV>")
+        prices = FilePrices(cfg.price_file)
+    elif cfg.price_source == "stooq":
+        prices = StooqPrices(http, cfg.price_symbol)
+    else:
+        prices = FredPrices(http)
     return Conductor(cfg, Store(cfg.db_path), http, load_signals(cfg), prices)
 
 

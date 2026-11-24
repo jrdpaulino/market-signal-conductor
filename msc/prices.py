@@ -44,3 +44,41 @@ class FredPrices:
             rows = parse_fred_csv(self.http.get(FRED_CSV, params={"id": self.series}))
             self._cache = [(d, v, v) for d, v in rows]
         return self._cache
+
+
+class FilePrices:
+    """Daily prices from a CSV file you downloaded yourself (Stooq, Yahoo Finance, a broker, anything with a Date
+    column and a Close column; an Open column is used when there is one). For long replays when no free feed
+    serves enough history. Respect the data provider's terms: personal research use is what this is for."""
+
+    def __init__(self, path):
+        self.path, self._cache, self._mtime = path, None, None
+
+    def __call__(self):
+        import os
+        mtime = os.path.getmtime(self.path)
+        if self._cache is None or mtime != self._mtime:
+            with open(self.path, encoding="utf-8-sig", newline="") as f:
+                self._cache = parse_price_csv(f.read())
+            self._mtime = mtime
+        return self._cache
+
+
+def parse_price_csv(text):
+    rows = csv.reader(io.StringIO(text))
+    header = [h.strip().lower() for h in next(rows, [])]
+    if "close" not in header or not ({"date", "observation_date"} & set(header)):
+        raise ValueError("price file needs a header with Date and Close columns (Open is used when present)")
+    di = header.index("date") if "date" in header else header.index("observation_date")
+    ci = header.index("close")
+    oi = header.index("open") if "open" in header else ci
+    out = {}
+    for r in rows:
+        try:
+            day = r[di].strip()[:10]
+            date.fromisoformat(day)
+            close = float(r[ci])
+            out[day] = (day, float(r[oi]) if r[oi].strip() else close, close)
+        except (ValueError, IndexError):
+            continue                     # blank or non-numeric rows
+    return sorted(out.values())

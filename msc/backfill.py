@@ -84,7 +84,11 @@ def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, 
     refit_every > 0: walk-forward re-fit of the model every that many replayed days, once refit_after have passed."""
     store = fresh_store(cfg, db_path)
     cond = Conductor(cfg, store, CachingHttp(http), [REGISTRY[n]() for n in (signal_names or BACKFILL_SIGNALS)], prices)
-    days = replay_days(prices(), start, end, step)
+    px = prices()
+    if not px:
+        raise RuntimeError(f"the price source returned no rows (source {cfg.price_source!r}); Stooq in particular may now "
+                           "refuse downloads without a key. Use MSC_PRICE_SOURCE=file with MSC_PRICE_FILE=<your downloaded CSV>")
+    days = replay_days(px, start, end, step)
     if not days:
         raise RuntimeError(f"no trading days between {start} and {end} in the price history")
     refits = 0
