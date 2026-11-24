@@ -5,6 +5,10 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .version import commit_id
+
+COMMIT = commit_id()          # looked up once at start, not on every health check
+
 PAGE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Market Signal Conductor</title>
@@ -104,7 +108,7 @@ async function load(){
  const t=l=>l.map(x=>[x.ticker,x.company||'–',x.industry||'–',pct(x.p_strong),pct(x.p_weak),(x.evidence||[]).join(', ')]);
  const H=['Ticker','Company','Industry','P(strong)','P(weak)','Evidence'];
  rows($('strong'),H,t(s.tilts.strongest));rows($('weak'),H,t(s.tilts.weakest));
- const k=s.track;$('track').textContent=k.n?('Scored forecasts: '+k.n+'. Hit rate '+pct(k.hit_rate)+'. Brier '+k.brier.toFixed(3)+' vs base rate '+k.brier_base.toFixed(3)+'.'):'No forecasts scored yet (each needs '+s.horizon+' trading days to resolve).';
+ const k=s.track;$('track').textContent=k.n?('Scored forecasts: '+k.n+'. Hit rate '+pct(k.hit_rate)+'. Brier '+k.brier.toFixed(3)+' vs base rate '+k.brier_base.toFixed(3)+(k.brier_running==null?'':' (running base rate '+k.brier_running.toFixed(3)+')')+'.'):'No forecasts scored yet (each needs '+s.horizon+' trading days to resolve).';
  $('gate').textContent=s.gate.passed?'Gate: PASSED. Live trading code may be considered.':('Gate: closed. '+s.gate.reasons.join('; ')+'.');
 }
 $('theme').onclick=()=>mscTheme.cycle();mscTheme.apply();
@@ -158,7 +162,7 @@ def make_handler(conductor, cfg, run_lock):
                     last_run = last[0] if last else "never"
                 except Exception:
                     last_run = "unknown"
-                return self._send(200, f"ok last_run={last_run}", "text/plain")
+                return self._send(200, f"ok last_run={last_run} commit={COMMIT}", "text/plain")
             if not self._authed():
                 return self._deny()
             if self.path in ("/", "/index.html"):

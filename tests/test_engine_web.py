@@ -10,6 +10,7 @@ from datetime import date, timedelta
 
 from msc import web
 from msc.config import Config
+from msc.version import commit_id
 from msc.engine import Conductor
 from msc.models import Observation
 from msc.signals.base import Signal, load_signals
@@ -135,9 +136,9 @@ class WebTests(unittest.TestCase):
     def test_auth_required_except_health(self):
         code, body = self.fetch("/healthz")
         self.assertEqual(code, 200)
-        self.assertEqual(body, "ok last_run=never")
+        self.assertEqual(body, f"ok last_run=never commit={commit_id()}")
         self.c.run_day("2026-01-05")
-        self.assertEqual(self.fetch("/healthz")[1], "ok last_run=2026-01-05")
+        self.assertEqual(self.fetch("/healthz")[1], f"ok last_run=2026-01-05 commit={commit_id()}")
         self.assertEqual(self.fetch("/")[0], 401)
         self.assertEqual(self.fetch("/api/state", "admin:wrong")[0], 401)
         self.assertEqual(self.fetch("/api/run", method="POST")[0], 401)
@@ -446,7 +447,7 @@ class DashboardExtrasTests(unittest.TestCase):
         from msc.web import PAGE
         self.assertIn('data-theme', PAGE)
         self.assertIn('getHours()', PAGE)
-        self.assertIn('How much each signal counts', PAGE)
+        self.assertIn('Signal Weights', PAGE)
         self.assertNotIn('prefers-color-scheme', PAGE)          # theme follows the clock, not the OS
 
 

@@ -122,7 +122,8 @@ class Conductor:
     def track(self):
         prices = self.price_history()
         return track_record(self.store.forecasts(), lambda d, h: (
-            None if (r := W.forward_return(prices, d, h)) is None else int(r > 0)))
+            None if (r := W.forward_return(prices, d, h)) is None else int(r > 0)),
+            exit_of=lambda d, h: W.forward_exit_days(prices, [d], h)[0])
 
     def scored_forecasts(self, raw=False):
         """[(p_up, outcome)] for every forecast whose outcome is now known. raw=True gives the model's own

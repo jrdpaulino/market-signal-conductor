@@ -28,6 +28,7 @@ from datetime import date
 
 from . import weights as W
 from .engine import Conductor
+from .version import commit_id
 from .execution.gate import brier_decomposition, check_gate
 from .signals import macro_fred, price_anchor  # noqa: F401  (registers them)
 from .signals.base import REGISTRY
@@ -97,6 +98,16 @@ def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, 
     return report(cond, days, step, refit_every, refits)
 
 
+def signal_errors(store):
+    """Why signals failed: per signal and error text, how many days, first and last day."""
+    out = {}
+    for sig, det, n, first, last in store._all(
+            "SELECT signal, detail, COUNT(*), MIN(day), MAX(day) FROM signal_health WHERE status='error' "
+            "GROUP BY signal, detail ORDER BY signal, MIN(day)"):
+        out.setdefault(sig, []).append(dict(error=det, days=n, first=first, last=last))
+    return out
+
+
 def report(cond, days, step, refit_every=0, refits=0):
     track = cond.track()
     passed, reasons = check_gate(track) if track["n"] else (False, ["no scored forecasts"])
@@ -107,7 +118,9 @@ def report(cond, days, step, refit_every=0, refits=0):
         first_day=days[0], last_day=days[-1], days_replayed=len(days), step_days=step, horizon=cond.cfg.horizon,
         walk_forward_refit=dict(every_days=refit_every, refits_done=refits) if refit_every else "off",
         scored_forecasts=track["n"], hit_rate=track["hit_rate"], brier=track["brier"],
-        brier_base_rate=track["brier_base"],
+        brier_base_rate=track["brier_base"], brier_running_base_rate=track.get("brier_running"),
+        beats_running_base_rate=(track["brier"] is not None and track.get("brier_running") is not None
+                                 and track["brier"] < track["brier_running"]),
         beats_base_rate=(track["brier"] is not None and track["brier"] < track["brier_base"]),
         gate_would_say=("pass" if passed else "fail"), gate_reasons=reasons,
         final_weights={k: dict(weight=round(v["weight"], 3), n=v["n"],
@@ -116,7 +129,7 @@ def report(cond, days, step, refit_every=0, refits=0):
         brier_breakdown=brier_decomposition(cond.scored_forecasts()),
         brier_breakdown_raw=brier_decomposition(cond.scored_forecasts(raw=True)),
         calibration_now=cond.store.kv_get("calib"),
-        signal_days=health,
+        signal_days=health, signal_errors=signal_errors(cond.store), commit=commit_id(),
         signal_overlap=[dict(r, note="moves closely with the other: partly double-counted") if abs(r["corr"]) >= OVERLAP_FLAG else r
                         for r in W.signal_overlap(cond.store)],
         note="Information only: replayed data is kept apart and never counts toward the live gate.",

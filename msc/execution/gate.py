@@ -20,17 +20,42 @@ def wilson_lower(hits, n, z=1.96):
     return (centre - margin) / denom
 
 
-def track_record(forecasts, outcome_of):
-    """forecasts: [(day, horizon, p_up, regime)]; outcome_of(day, horizon) -> 1, 0 or None (not yet known)."""
-    scored = [(p, o) for d, h, p, _r in forecasts if (o := outcome_of(d, h)) is not None]
+def running_base_brier(rows):
+    """Brier score of a forecaster that only ever says "the up-rate so far". rows: [(day, exit_day, outcome)].
+    At each forecast day the base rate uses only outcomes already known (exit_day <= day); with none known it
+    says 0.5. This is the fair yardstick: it is what a naive person could actually have forecast at the time,
+    unlike the full-sample base rate, which uses outcomes from the future."""
+    rows = sorted(rows)
+    pending = sorted((e, o) for _d, e, o in rows)
+    k = ups = 0
+    total = 0.0
+    for d, _e, o in rows:
+        while k < len(pending) and pending[k][0] <= d:
+            ups += pending[k][1]
+            k += 1
+        base = ups / k if k else 0.5
+        total += (base - o) ** 2
+    return total / len(rows) if rows else None
+
+
+def track_record(forecasts, outcome_of, exit_of=None):
+    """forecasts: [(day, horizon, p_up, regime)]; outcome_of(day, horizon) -> 1, 0 or None (not yet known).
+    exit_of(day, horizon) -> the date the outcome became known; when given, brier_running is also reported."""
+    scored, run_rows = [], []
+    for d, h, p, _r in forecasts:
+        if (o := outcome_of(d, h)) is not None:
+            scored.append((p, o))
+            if exit_of is not None and (e := exit_of(d, h)) is not None:
+                run_rows.append((d, e, o))
     n = len(scored)
     if n == 0:
-        return dict(n=0, hits=0, hit_rate=None, brier=None, brier_base=None)
+        return dict(n=0, hits=0, hit_rate=None, brier=None, brier_base=None, brier_running=None)
     hits = sum((p >= 0.5) == bool(o) for p, o in scored)
     brier = sum((p - o) ** 2 for p, o in scored) / n
     base = sum(o for _p, o in scored) / n
     brier_base = sum((base - o) ** 2 for _p, o in scored) / n
-    return dict(n=n, hits=hits, hit_rate=hits / n, brier=brier, brier_base=brier_base)
+    return dict(n=n, hits=hits, hit_rate=hits / n, brier=brier, brier_base=brier_base,
+                brier_running=running_base_brier(run_rows) if run_rows else None)
 
 
 def check_gate(track):

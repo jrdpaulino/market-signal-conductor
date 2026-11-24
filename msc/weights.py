@@ -51,6 +51,16 @@ def forward_returns(prices, query_days, horizon):
     return out
 
 
+def forward_exit_days(prices, query_days, horizon):
+    """For each query day, the date on which its forward return becomes known (None if not yet)."""
+    days = [p[0] for p in prices]
+    out = []
+    for day in query_days:
+        i = bisect_right(days, day) - 1
+        out.append(days[i + horizon] if i >= 0 and i + horizon < len(prices) else None)
+    return out
+
+
 def weight_from_pairs(scores, returns):
     n = len(scores)
     corr = pearson(scores, returns) if n >= MIN_PAIRS else float("nan")

@@ -20,6 +20,10 @@ fly secrets set MSC_DASH_PASSWORD=<long random password> SEC_USER_AGENT="Your Na
 fly deploy --ha=false
 ```
 
+- To stamp the running code version, deploy with `fly deploy --ha=false --build-arg MSC_COMMIT=$(git rev-parse --short HEAD)`
+  (PowerShell: `fly deploy --ha=false --build-arg MSC_COMMIT=$(git rev-parse --short HEAD)` works the same). `/healthz`
+  then shows `commit=`. Tests, `python -m unittest`, print `msc commit under test: <id>` first (`-dirty` means
+  uncommitted changes); backfill reports carry a `commit` field.
 - `--ha=false` keeps a single machine. The SQLite file lives on one volume, which attaches to one machine, so a
   second machine would hold a different, empty database.
 - Fly requires a card on file for always-on machines. Without one, machines stop after 5 minutes.
@@ -51,7 +55,7 @@ fly deploy --ha=false
 
 ## Uptime monitoring
 
-`/healthz` needs no password and answers `ok last_run=<date>`, the day of the latest daily run. The
+`/healthz` needs no password and answers `ok last_run=<date> commit=<git commit>`: the day of the latest daily run and the code version. The
 `.github/workflows/uptime.yml` workflow calls it every three hours and fails if the app is unreachable or the last run is
 more than two days old; GitHub emails you when a scheduled run fails. To turn it on, add a repository secret named
 `APP_URL` (Settings, Secrets and variables, Actions) set to your app's address, such as `https://your-app.fly.dev`.
@@ -96,6 +100,11 @@ The report includes `brier_breakdown`: `bias` (mean forecast minus the base rate
 lower is better), `resolution` (discrimination, higher is better) and `brier_if_level_fixed` (the score if only the
 overall level were corrected). A model can lose to the base rate purely because its average is off, with no signal
 problem at all; this shows which case you are in.
+
+Two yardsticks: `brier_base_rate` uses the whole period's up-rate (hindsight, nothing can know it in advance);
+`brier_running_base_rate` uses only outcomes already known at each forecast date, which is what a naive forecaster
+could really have said. Beating the running one is the fairer test; the gate still uses the hindsight one.
+`signal_errors` lists why a signal failed (error text, days, first and last day).
 
 How to read the output: `hit_rate` and the Brier score against the base rate are the numbers that matter;
 `gate_would_say` is informational only. Consecutive 20-day outcomes overlap, so the real sample is far smaller
