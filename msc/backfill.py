@@ -102,13 +102,20 @@ def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, 
 
 
 def signal_errors(store):
-    """Why signals failed: per signal and error text, how many days, first and last day."""
+    """Why signals failed: per signal and error text, how many days, first and last day. Counts inside the
+    text ("have 17") are folded into "N" so a warm-up period is one line, not one line per day."""
+    import re
     out = {}
-    for sig, det, n, first, last in store._all(
-            "SELECT signal, detail, COUNT(*), MIN(day), MAX(day) FROM signal_health WHERE status='error' "
-            "GROUP BY signal, detail ORDER BY signal, MIN(day)"):
-        out.setdefault(sig, []).append(dict(error=det, days=n, first=first, last=last))
-    return out
+    for sig, det, day in store._all(
+            "SELECT signal, detail, day FROM signal_health WHERE status='error' ORDER BY signal, day"):
+        key = re.sub(r"\d+", "N", det or "")
+        rows = out.setdefault(sig, {})
+        row = rows.setdefault(key, dict(error=det, days=0, first=day, last=day))
+        row["days"] += 1
+        row["last"] = day
+        if key != det:
+            row["error"] = key
+    return {sig: sorted(rows.values(), key=lambda r: r["first"]) for sig, rows in out.items()}
 
 
 def report(cond, days, step, refit_every=0, refits=0, placebo=200):
