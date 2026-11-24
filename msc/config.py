@@ -57,6 +57,7 @@ class Config:
     price_source: str = "fred"          # "fred" (S&P 500 closes, default) or "stooq"
     price_symbol: str = "spy.us"        # Stooq symbol for the market anchor and for scoring
     horizon: int = 20                   # trading days ahead that forecasts refer to
+    calibrate: bool = True              # pull P(up) toward the track record (MSC_CALIBRATE=0 turns it off)
     run_hour_utc: int = 22
     run_minute_utc: int = 30
     port: int = 8080
@@ -82,6 +83,7 @@ class Config:
             price_source=g("MSC_PRICE_SOURCE", "fred").lower(),
             price_symbol=g("MSC_PRICE_SYMBOL", "spy.us"),
             horizon=int(g("MSC_HORIZON", "20")),
+            calibrate=g("MSC_CALIBRATE", "1") != "0",
             run_hour_utc=int(g("MSC_RUN_HOUR_UTC", "22")),
             run_minute_utc=int(g("MSC_RUN_MINUTE_UTC", "30")),
             port=int(g("PORT", g("MSC_PORT", "8080"))),

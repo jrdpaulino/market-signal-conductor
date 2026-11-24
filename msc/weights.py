@@ -37,6 +37,20 @@ def forward_return(prices, day, horizon):
     return exit_ / entry - 1 if entry and entry > 0 else None
 
 
+def forward_returns(prices, query_days, horizon):
+    """[forward_return(prices, d, horizon) for d in query_days], building the day index once."""
+    days = [p[0] for p in prices]
+    out = []
+    for day in query_days:
+        i = bisect_right(days, day) - 1
+        if i < 0 or i + horizon >= len(prices):
+            out.append(None)
+            continue
+        entry, exit_ = prices[i + 1][1], prices[i + horizon][2]
+        out.append(exit_ / entry - 1 if entry and entry > 0 else None)
+    return out
+
+
 def weight_from_pairs(scores, returns):
     n = len(scores)
     corr = pearson(scores, returns) if n >= MIN_PAIRS else float("nan")

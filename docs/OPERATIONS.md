@@ -113,3 +113,18 @@ data, never live. Each card says its source and time.
 - If every card says "end of day (FRED)", Stooq is not answering from your host; the strip still works.
 - Results are cached for 60 seconds on the server, so open dashboards do not multiply requests. A failure only
   removes cards, never breaks the page. The strip does not feed the model.
+
+## Forecast calibration
+
+The model's raw P(up) is pulled toward the track record once 60 forecasts have been scored (`msc/calibration.py`):
+the average level moves toward the observed up-rate and the day-to-day swings are scaled by how well they have
+predicted. Both moves are weighted by the effective sample size (scored outcomes divided by the 20-day horizon,
+because consecutive outcomes overlap), so a young record barely changes the forecast. Calibration can quiet the
+swings but never amplify or invert them.
+
+- The dashboard says whether the forecast is raw or calibrated, and with how much weight.
+- The raw number is always stored (`praw:<day>` in the database). The gate grades the calibrated forecast.
+- Switch it off with `fly secrets set MSC_CALIBRATE=0`.
+- The backfill report shows both: `brier_breakdown` (calibrated) and `brier_breakdown_raw`. If calibrated is not
+  better than raw over a long replay, turn it off. On simulated data it is roughly neutral when signals are pure
+  noise and helps only when the raw level is far from the true up-rate.

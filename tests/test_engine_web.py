@@ -346,6 +346,7 @@ class BackfillExtrasTests(_FredFake, unittest.TestCase):
         self.assertGreater(res["walk_forward_refit"]["refits_done"], 3)
         b = res["brier_breakdown"]
         self.assertAlmostEqual(b["brier"], b["reliability"] - b["resolution"] + b["uncertainty"], delta=0.02)
+        self.assertEqual(res["brier_breakdown"]["n"], res["brier_breakdown_raw"]["n"])      # calibrated and raw side by side
 
     def test_rerun_starts_clean_and_foreign_databases_are_refused(self):
         from msc.backfill import backfill_path, run_backfill
@@ -538,3 +539,106 @@ class QuotesTests(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+
+class CalibrationTests(unittest.TestCase):
+    def test_uninformative_forecasts_are_flattened(self):
+        from msc.calibration import apply_calibration, fit_calibration
+        import random
+        rng = random.Random(1)
+        pairs = [(rng.choice([0.42, 0.52, 0.60, 0.62]), int(rng.random() < 0.65)) for _ in range(1500)]
+        cal = fit_calibration(pairs)
+        self.assertTrue(cal["active"])
+        self.assertLess(cal["slope"], 0.25)                                 # the swings carry no information
+        spread_before = 0.62 - 0.42
+        self.assertLess(apply_calibration(0.62, cal) - apply_calibration(0.42, cal), 0.25 * spread_before + 1e-9)
+
+    def test_level_moves_toward_the_observed_up_rate_in_proportion_to_the_record(self):
+        from msc.calibration import apply_calibration, fit_calibration
+        short = fit_calibration([(0.5, 1)] * 40 + [(0.5, 0)] * 20)           # 60 overlapping outcomes: worth ~3 independent
+        long = fit_calibration([(0.5, 1)] * 1400 + [(0.5, 0)] * 700)          # ~100 independent outcomes, up-rate 67%
+        self.assertLess(short["level_w"], 0.1)
+        self.assertGreater(long["level_w"], 0.6)
+        self.assertLess(abs(apply_calibration(0.5, short) - 0.5), 0.02)       # a young record barely moves the forecast
+        self.assertGreater(apply_calibration(0.5, long), 0.62)                # a long one moves most of the way to 0.67
+
+    def test_informative_forecasts_keep_spread_but_are_never_amplified(self):
+        from msc.calibration import apply_calibration, fit_calibration
+        import random
+        rng = random.Random(2)
+        pairs = []
+        for _ in range(3000):
+            p = rng.choice([0.3, 0.5, 0.7])
+            pairs.append((p, int(rng.random() < p)))                         # perfectly calibrated
+        cal = fit_calibration(pairs)
+        self.assertGreater(cal["slope"], 0.6)
+        self.assertLessEqual(cal["slope"], 1.0)
+        self.assertGreater(apply_calibration(0.7, cal), apply_calibration(0.3, cal) + 0.2)
+        self.assertLess(apply_calibration(0.7, cal) - apply_calibration(0.3, cal), 0.4 + 1e-9)    # never wider than the raw spread
+
+    def test_backwards_forecasts_are_flattened_not_inverted(self):
+        from msc.calibration import apply_calibration, fit_calibration
+        pairs = [(0.7, 0)] * 40 + [(0.7, 1)] * 20 + [(0.3, 1)] * 40 + [(0.3, 0)] * 20       # high p -> fewer ups
+        cal = fit_calibration(pairs)
+        self.assertEqual(cal["slope"], 0.0)
+        self.assertAlmostEqual(apply_calibration(0.7, cal), apply_calibration(0.3, cal))
+
+    def test_nothing_changes_until_enough_outcomes_and_output_is_bounded(self):
+        from msc.calibration import apply_calibration, fit_calibration
+        cal = fit_calibration([(0.6, 1)] * 59)
+        self.assertFalse(cal["active"])
+        self.assertEqual(apply_calibration(0.61, cal), 0.61)
+        extreme = fit_calibration([(0.5, 1)] * 5000 + [(0.51, 1)] * 5000)
+        self.assertLessEqual(apply_calibration(0.5, extreme), 0.95)
+
+    def _conductor(self, calibrate=True):
+        from msc.signals.base import Signal
+        prices = make_prices(260)
+
+        class Up(Signal):
+            name, description, needs = "up", "x", ()
+
+            def collect(self, ctx):
+                k = [d for d, _o, _c in prices].index(ctx.day)
+                return [Observation("up", ctx.day, "market", "", ((k % 11) - 5) / 5, 0.9)]
+        cfg = Config(db_path=os.path.join(tempfile.mkdtemp(), "c.sqlite"), calibrate=calibrate)
+        return Conductor(cfg, Store(cfg.db_path), None, [Up()], lambda: prices), prices
+
+    def test_run_day_keeps_the_raw_forecast_and_calibrates_once_there_is_a_record(self):
+        c, prices = self._conductor()
+        results = [c.run_day(d) for d, _o, _c in prices[30:200]]
+        early, late = results[5], results[-1]
+        self.assertEqual(early["p_up"], early["p_raw"])                      # no outcomes known yet
+        self.assertTrue(c.store.kv_get("calib")["active"])
+        self.assertNotEqual(late["p_up"], late["p_raw"])
+        self.assertEqual(c.store.kv_get(f"praw:{late['day']}"), late["p_raw"])
+        stored = dict((d, p) for d, _h, p, _r in c.store.forecasts())
+        self.assertEqual(stored[late["day"]], late["p_up"])                  # the gate grades the calibrated number
+        self.assertEqual(c.state()["calibration"]["active"], True)
+
+    def test_switch_off_leaves_the_raw_forecast(self):
+        c, prices = self._conductor(calibrate=False)
+        for d, _o, _c in prices[30:200]:
+            r = c.run_day(d)
+            self.assertEqual(r["p_up"], r["p_raw"])
+
+    def test_calibration_never_sees_outcomes_after_its_day(self):
+        c, prices = self._conductor()
+        for d, _o, _c in prices[30:200]:
+            c.run_day(d)
+        day = prices[150][0]
+        seen = c.calibration_on(day)
+        c2, _ = self._conductor()
+        c2.prices = lambda: prices[:151]                                     # the future was never available
+        for d, _o, _c in prices[30:151]:
+            c2.run_day(d)
+        self.assertEqual(seen["n"], c2.calibration_on(day)["n"])
+
+    def test_scored_forecasts_can_return_the_raw_numbers(self):
+        c, prices = self._conductor()
+        for d, _o, _c in prices[30:200]:
+            c.run_day(d)
+        cal, raw = c.scored_forecasts(), c.scored_forecasts(raw=True)
+        self.assertEqual(len(cal), len(raw))
+        self.assertNotEqual([p for p, _ in cal], [p for p, _ in raw])
+        self.assertEqual([o for _, o in cal], [o for _, o in raw])

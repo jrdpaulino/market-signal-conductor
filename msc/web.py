@@ -42,7 +42,7 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 6px;
 </style></head><body><main>
 <div class="top"><h1>Market Signal Conductor</h1><button id="theme" class="ghost" title="Switch between automatic day/night, day and night"></button></div><div class="sub" id="asof">loading…</div>
 <div id="quotes" class="quotes"></div>
-<div class="card"><h2>Market cycle</h2><div class="big" id="regime">–</div><div class="mut" id="pup"></div><div id="belief"></div>
+<div class="card"><h2>Market cycle</h2><div class="big" id="regime">–</div><div class="mut" id="pup"></div><div class="mut" id="calib" style="font-size:13px"></div><div id="belief"></div>
 <svg id="spark" viewBox="0 0 600 90" preserveAspectRatio="none"></svg></div>
 <div class="card"><h2>Signals</h2><table id="signals"></table></div>
 <div class="card"><h2>How much each signal counts</h2>
@@ -63,6 +63,7 @@ async function load(){
  $('asof').textContent=s.as_of?('As of '+s.as_of+' (UTC)'):'No run yet. Press "Run now".';
  $('regime').textContent=s.regime?s.regime.replace('_',' '):'–';
  $('pup').textContent=s.p_up==null?'':('Chance the market is up over the next '+s.horizon+' trading days: '+pct(s.p_up));
+ const cb=s.calibration;$('calib').textContent=!cb?'':(cb.active?('Calibrated against '+cb.n+' scored outcomes: the model\'s swings are scaled to '+Math.round(100*cb.slope)+'% and centered on the real up-rate of '+pct(cb.base)+'.'):('Raw model forecast. Calibration starts after 60 scored outcomes ('+cb.n+' so far).'));
  const b=$('belief');b.replaceChildren();
  Object.entries(s.belief).forEach(([k,v])=>{const row=el('div',undefined,'row');row.append(el('span',k.replace('_',' '),'lab'));
   const bar=el('div',undefined,'bar');const i=el('i');i.style.width=(100*v)+'%';bar.append(i);row.append(bar);row.append(el('span',pct(v),'num'));b.append(row)});

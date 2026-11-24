@@ -69,7 +69,8 @@ def main(argv=None):
             plain = run_backfill(cfg, cond.http, cond.prices, start, end, out, step, prog)
             refit = run_backfill(cfg, cond.http, cond.prices, start, end, backfill_path(cfg, "backfill.refit"), step, prog,
                                  refit_every=63)
-            keys = ("walk_forward_refit", "scored_forecasts", "hit_rate", "brier", "brier_base_rate", "beats_base_rate", "brier_breakdown")
+            keys = ("walk_forward_refit", "scored_forecasts", "hit_rate", "brier", "brier_base_rate", "beats_base_rate",
+                    "brier_breakdown", "brier_breakdown_raw")
             print(json.dumps(dict(compare={"plain": {k: plain[k] for k in keys}, "walk_forward_refit": {k: refit[k] for k in keys}},
                                   plain=plain, walk_forward_refit=refit), indent=2, default=str))
         else:

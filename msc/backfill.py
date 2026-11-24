@@ -114,6 +114,8 @@ def report(cond, days, step, refit_every=0, refits=0):
                                corr=None if v["corr"] is None else round(v["corr"], 3))
                        for k, v in cond.store.latest_weights().items()},
         brier_breakdown=brier_decomposition(cond.scored_forecasts()),
+        brier_breakdown_raw=brier_decomposition(cond.scored_forecasts(raw=True)),
+        calibration_now=cond.store.kv_get("calib"),
         signal_days=health,
         signal_overlap=[dict(r, note="moves closely with the other: partly double-counted") if abs(r["corr"]) >= OVERLAP_FLAG else r
                         for r in W.signal_overlap(cond.store)],

@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 
 from . import weights as W
+from .calibration import apply_calibration, fit_calibration
 from .company import Companies
 from .execution.gate import check_gate, track_record
 from .quotes import Quotes
@@ -56,12 +57,16 @@ class Conductor:
         market = self._by_signal([o for o in obs_today if o.scope == "market"], weights)
         belief = model.step(belief, market)
         regime = REGIMES[max(range(4), key=lambda i: belief[i])]
-        p_up = model.forecast_p_up(belief)
+        p_raw = model.forecast_p_up(belief)
+        cal = self.calibration_on(day) if self.cfg.calibrate else fit_calibration([], self.cfg.horizon)
+        p_up = apply_calibration(p_raw, cal)
+        self.store.kv_set(f"praw:{day}", p_raw)              # the model's own number, kept next to the calibrated one
+        self.store.kv_set("calib", dict(cal, day=day))
         self.store.set_belief(day, belief, p_up, regime)
         self.store.set_forecast(day, self.cfg.horizon, p_up, regime)
 
         tickers = self._step_stocks(day, obs_today, weights, belief)
-        return dict(day=day, regime=regime, belief=dict(zip(REGIMES, belief)), p_up=p_up, health=health,
+        return dict(day=day, regime=regime, belief=dict(zip(REGIMES, belief)), p_up=p_up, p_raw=p_raw, health=health,
                     weights={k: v[0] for k, v in weights.items()}, tickers_updated=tickers)
 
     @staticmethod
@@ -119,15 +124,27 @@ class Conductor:
         return track_record(self.store.forecasts(), lambda d, h: (
             None if (r := W.forward_return(prices, d, h)) is None else int(r > 0)))
 
-    def scored_forecasts(self):
-        """[(p_up, outcome)] for every forecast whose outcome is now known."""
+    def scored_forecasts(self, raw=False):
+        """[(p_up, outcome)] for every forecast whose outcome is now known. raw=True gives the model's own
+        number before calibration (older forecasts, made before calibration existed, are already raw)."""
         prices = self.price_history()
+        rows = self.store.forecasts()
+        raws = self.store.kv_prefix("praw:") if raw else {}
         out = []
-        for d, h, p, _r in self.store.forecasts():
-            r = W.forward_return(prices, d, h)
+        for (d, _h, p, _r), r in zip(rows, W.forward_returns(prices, [x[0] for x in rows], self.cfg.horizon)):
             if r is not None:
-                out.append((p, int(r > 0)))
+                out.append((raws.get(f"praw:{d}", p) if raw else p, int(r > 0)))
         return out
+
+    def calibration_on(self, day):
+        """Calibration fitted only on forecasts whose outcome was known by `day`."""
+        prices = [p for p in self.price_history() if p[0] <= day]
+        rows = [x for x in self.store.forecasts() if x[0] < day]
+        raws = self.store.kv_prefix("praw:")
+        pairs = [(raws.get(f"praw:{d}", p), int(r > 0))
+                 for (d, _h, p, _r), r in zip(rows, W.forward_returns(prices, [x[0] for x in rows], self.cfg.horizon))
+                 if r is not None]
+        return fit_calibration(pairs, self.cfg.horizon)
 
     # ---------------------------------------------------------------- learning from history
     def learn(self, as_of=None):
@@ -201,6 +218,7 @@ class Conductor:
             regime=latest[3] if latest else None,
             belief=dict(zip(REGIMES, latest[1])) if latest else {},
             p_up=latest[2] if latest else None,
+            calibration=self.store.kv_get("calib"),
             horizon=self.cfg.horizon,
             history=[dict(day=d, p_up=p, regime=r, belief=dict(zip(REGIMES, b))) for d, b, p, r in
                      [(x[0], x[1], x[2], x[3]) for x in beliefs[-120:]]],

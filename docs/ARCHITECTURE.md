@@ -289,6 +289,13 @@ Wilson 95% lower bound on the hit rate above 0.5. No broker or order code exists
 A signal is any subclass of `Signal` that returns `Observation` objects, registered with `@register`. Extra modules
 load through `MSC_EXTRA_MODULES`. See `msc/signals/_template.py`.
 
+## Calibration
+
+`calibration.py` adjusts the Markov model's P(up) using only outcomes already known: the level is pooled toward the
+observed up-rate by effective sample size and the swings are scaled by the observed slope (kept in 0..1). The raw
+forecast is stored beside the calibrated one (`praw:<day>`); the gate and dashboard use the calibrated one;
+`MSC_CALIBRATE=0` switches it off. It never feeds back into the regime beliefs.
+
 ## Backfill
 
 `python -m msc backfill` replays the replayable signals (FRED macro series and the S&P 500 trend) over past days
