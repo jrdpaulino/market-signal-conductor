@@ -103,19 +103,26 @@ def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, 
 
 def signal_errors(store):
     """Why signals failed: per signal and error text, how many days, first and last day. Counts inside the
-    text ("have 17") are folded into "N" so a warm-up period is one line, not one line per day."""
+    text ("have 17") are folded into "N" so a warm-up period is one line, not one line per day. A message that
+    only ever appears in one form (for example one with a series id) is shown exactly as it was."""
     import re
     out = {}
     for sig, det, day in store._all(
             "SELECT signal, detail, day FROM signal_health WHERE status='error' ORDER BY signal, day"):
-        key = re.sub(r"\d+", "N", det or "")
-        rows = out.setdefault(sig, {})
-        row = rows.setdefault(key, dict(error=det, days=0, first=day, last=day))
+        det = det or ""
+        key = re.sub(r"\b(need|have) \d+", r"\1 N", det)
+        row = out.setdefault(sig, {}).setdefault(key, dict(error=det, days=0, first=day, last=day, _forms=set()))
         row["days"] += 1
         row["last"] = day
-        if key != det:
-            row["error"] = key
-    return {sig: sorted(rows.values(), key=lambda r: r["first"]) for sig, rows in out.items()}
+        row["_forms"].add(det)
+    result = {}
+    for sig, rows in out.items():
+        result[sig] = []
+        for key, row in sorted(rows.items(), key=lambda kv: kv[1]["first"]):
+            forms = row.pop("_forms")
+            row["error"] = key if len(forms) > 1 else next(iter(forms))
+            result[sig].append(row)
+    return result
 
 
 def report(cond, days, step, refit_every=0, refits=0, placebo=200):

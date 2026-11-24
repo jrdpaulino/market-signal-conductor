@@ -41,7 +41,9 @@ class VersionAndErrorsTests(unittest.TestCase):
         s.set_health("2026-01-02", "sig", "error", 0, "RuntimeError: need 250 observations, have 10")
         s.set_health("2026-01-03", "sig", "ok", 1)
         s.set_health("2026-01-04", "sig", "error", 0, "RuntimeError: need 250 observations, have 11")
+        s.set_health("2026-01-05", "other", "error", 0, "RuntimeError: FRED BAMLH0A0HYM2: no usable data")
         out = signal_errors(s)
+        self.assertEqual(out["other"][0]["error"], "RuntimeError: FRED BAMLH0A0HYM2: no usable data")   # series id not mangled
         self.assertEqual(len(out["sig"]), 1)                       # the changing count is folded into one line
         self.assertEqual(out["sig"][0]["days"], 3)
         self.assertEqual((out["sig"][0]["first"], out["sig"][0]["last"]), ("2026-01-01", "2026-01-04"))
