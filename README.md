@@ -7,7 +7,7 @@
 ![Strongest and weakest stocks with company and industry](docs/img/dashboard-stocks.png)
 
 
-> **At a glance:** Python (standard library only), about 3000 lines including tests, 92 tests, deployed on Fly.io. A hidden Markov
+> **At a glance:** Python (standard library only), about 3000 lines including tests, 97 tests, deployed on Fly.io. A hidden Markov
 > model over a market cycle, plug-in data signals, outcome-based reliability weights and a coded evidence gate
 > before any trading. [Vision](VISION.md) | [Architecture](docs/ARCHITECTURE.md) | [Operations](docs/OPERATIONS.md)
 
@@ -48,7 +48,8 @@ signals (plugins) --> observations --> Markov core --> dashboard
 | `prediction_markets` | Polymarket (Gamma API) and Kalshi (public market data): week-over-week change in odds of stock-friendly outcomes, tracked per venue | nothing (rules in `MSC_PM_RULES`, venues in `MSC_PM_VENUES`) |
 | `social` | Public Reddit RSS: tone of cashtag chatter | nothing |
 | `journals_news` | RSS feeds (`MSC_RSS_FEEDS`): tone, discounted by speculative wording | nothing |
-| `macro_curve`, `macro_credit`, `macro_vix` | FRED free CSV downloads: yield-curve slope (T10Y2Y, T10Y3M), high-yield spread (BAMLH0A0HYM2), VIX (VIXCLS). Three signals so each earns its own weight | nothing |
+| `macro_curve`, `macro_credit`, `macro_vix` | FRED free CSV downloads: yield-curve slope (T10Y2Y, T10Y3M), high-yield spread (BAMLH0A0HYM2), VIX (VIXCLS). Separate signals so each earns its own weight | nothing |
+| `macro_labor`, `macro_conditions` | FRED weekly series: initial jobless claims (ICSA, 4-week average) and the Chicago Fed financial conditions index (NFCI). Used only from 5 days after their date (release delay). Stress is bearish; weights decide how far each is trusted | nothing |
 | `price_anchor` | S&P 500 closes from FRED (default; `MSC_PRICE_SOURCE=stooq` to switch): benchmark trend, anchors the cycle states. The same prices score every forecast | nothing |
 | `anomaly_flow` | Built from the other signals' stored data and the benchmark price: flags an unusually large one-day jump in prediction-market odds or benchmark price (z-score against its own recent history). Low confidence, runs last, logs each flagged event for later review. Does not see single options trades (that needs a paid feed) | nothing |
 

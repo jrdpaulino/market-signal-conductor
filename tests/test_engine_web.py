@@ -105,7 +105,8 @@ class EngineTests(unittest.TestCase):
     def test_builtin_signals_register(self):
         names = {s.name for s in load_signals(Config())}
         self.assertEqual(names, {"sec_filings", "prediction_markets", "social", "journals_news", "price_anchor",
-                                 "macro_curve", "macro_credit", "macro_vix", "anomaly_flow"})
+                                 "macro_curve", "macro_credit", "macro_vix", "macro_labor", "macro_conditions",
+                                 "anomaly_flow"})
         self.assertEqual([s.name for s in load_signals(Config())][-1], "anomaly_flow")   # runs after what it reads
 
 
@@ -267,7 +268,8 @@ class _FredFake:
     def _http(self):
         sp = self._csv("SP500", base=3000, wobble=300)
         data = {"SP500": sp, "T10Y2Y": self._csv("T10Y2Y"), "T10Y3M": self._csv("T10Y3M"),
-                "BAMLH0A0HYM2": self._csv("BAMLH0A0HYM2", base=4), "VIXCLS": self._csv("VIXCLS", base=18, wobble=6)}
+                "BAMLH0A0HYM2": self._csv("BAMLH0A0HYM2", base=4), "VIXCLS": self._csv("VIXCLS", base=18, wobble=6),
+                "ICSA": self._csv("ICSA", base=230000, wobble=30000)}
 
         class H:
             calls = 0
@@ -295,7 +297,7 @@ class BackfillTests(_FredFake, unittest.TestCase):
         res = run_backfill(cfg, http, prices, all_days[600], all_days[-1], out, step=7)
         self.assertGreater(res["days_replayed"], 50)
         self.assertGreater(res["scored_forecasts"], 20)
-        self.assertEqual(set(res["final_weights"]) - {"price_anchor", "macro_curve", "macro_credit", "macro_vix"}, set())
+        self.assertEqual(set(res["final_weights"]) - {"price_anchor", "macro_curve", "macro_credit", "macro_vix", "macro_labor"}, set())
         self.assertLess(H.calls, 12)                      # five FRED series fetched once each, not once per day
         self.assertFalse(os.path.exists(cfg.db_path))     # the live database is untouched
         self.assertIn("never counts toward the live gate", res["note"])

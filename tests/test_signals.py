@@ -304,6 +304,52 @@ class MacroTests(unittest.TestCase):
             macro_fred.MacroCredit().collect(ctx)
 
 
+class WeeklyMacroTests(unittest.TestCase):
+    @staticmethod
+    def weekly_csv(values, last_date, header="observation_date,X"):
+        n = len(values)
+        lines = [header] + [f"{(last_date - timedelta(weeks=n - 1 - i)).isoformat()},{v}" for i, v in enumerate(values)]
+        return "\n".join(lines)
+
+    CALM = [220000 + 4000 * ((i * 7) % 5 - 2) for i in range(300)]
+
+    def ctx(self, values, last_date=date(2026, 11, 14), day="2026-11-24"):
+        c = ctx_for({"fredgraph": self.weekly_csv(values, last_date)})
+        c.day = day
+        return c
+
+    def test_claims_spike_is_bearish_and_falling_claims_are_bullish(self):
+        spike = self.CALM[:-6] + [250000, 270000, 300000, 330000, 350000, 380000]
+        self.assertLess(macro_fred.MacroLabor().collect(self.ctx(spike))[0].score, -0.5)
+        falling = self.CALM[:-6] + [212000, 208000, 205000, 202000, 200000, 198000]
+        self.assertGreater(macro_fred.MacroLabor().collect(self.ctx(falling))[0].score, 0.3)
+
+    def test_a_huge_old_spike_does_not_blind_the_signal(self):
+        covid = self.CALM[:100] + [6000000, 4000000, 2000000, 900000] + self.CALM[104:]       # one 2020-style spike
+        rise = covid[:-6] + [250000, 270000, 300000, 330000, 350000, 380000]
+        self.assertLess(macro_fred.MacroLabor().collect(self.ctx(rise))[0].score, -0.5)
+
+    def test_a_reading_is_not_used_before_it_was_released(self):
+        vals = self.CALM[:-1] + [900000]                         # a shock dated Saturday 2026-11-21
+        c = self.ctx(vals, last_date=date(2026, 11, 21), day="2026-11-24")                  # released Thursday the 26th
+        self.assertGreater(macro_fred.MacroLabor().collect(c)[0].score, -0.3)               # not yet visible
+        c = self.ctx(vals, last_date=date(2026, 11, 21), day="2026-11-27")
+        self.assertLess(macro_fred.MacroLabor().collect(c)[0].score, -0.5)                  # visible after release
+
+    def test_stale_or_short_weekly_history_is_an_error(self):
+        with self.assertRaises(RuntimeError):
+            macro_fred.MacroLabor().collect(self.ctx(self.CALM, last_date=date(2026, 10, 3)))   # 7+ weeks old
+        with self.assertRaises(RuntimeError):
+            macro_fred.MacroLabor().collect(self.ctx(self.CALM[:50]))
+
+    def test_conditions_tight_is_bearish_loose_is_bullish(self):
+        base = [-0.45 + 0.02 * ((i * 3) % 5 - 2) for i in range(300)]
+        tight = base[:-8] + [-0.2, 0.0, 0.2, 0.4, 0.7, 1.0, 1.3, 1.6]
+        loose = base[:-1] + [-0.75]
+        self.assertLess(macro_fred.MacroConditions().collect(self.ctx(tight))[0].score, -0.4)
+        self.assertGreater(macro_fred.MacroConditions().collect(self.ctx(loose))[0].score, 0.3)
+
+
 if __name__ == "__main__":
     unittest.main()
 

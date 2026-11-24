@@ -11,7 +11,7 @@ signals (plug-ins) --> observations --> Markov core --> store --> dashboard
  social                 scope: market      Layer 2: each stock weak / neutral / strong,
  journals_news          or ticker            odds tilted by the regime belief
  price_anchor                              Reliability weights: each signal's influence comes from
- macro_curve / _credit / _vix                its record against what the market did next
+ macro_curve / _credit / _vix / _labor / _conditions   its record against what the market did next
  anomaly_flow (runs last)
 ```
 
@@ -284,6 +284,7 @@ Wilson 95% lower bound on the hit rate above 0.5. No broker or order code exists
 | `price_anchor` | FRED SP500 | Benchmark trend, momentum and drawdown |
 | `anomaly_flow` | Stored prediction-market levels, FRED SP500 | Unusual one-day jumps (z-score vs the series' own recent changes); runs last; each flag is logged under kv `anomaly:<day>` |
 | `macro_curve`, `macro_credit`, `macro_vix` | FRED CSV downloads | Yield-curve slope, high-yield spread, VIX |
+| `macro_labor`, `macro_conditions` | FRED weekly CSV (ICSA, NFCI) | Jobless-claims level and trend (robust z-scores); financial-conditions level and change. A reading counts only 5 days after its date. NFCI is revised every week, so it is left out of the backfill |
 
 A signal is any subclass of `Signal` that returns `Observation` objects, registered with `@register`. Extra modules
 load through `MSC_EXTRA_MODULES`. See `msc/signals/_template.py`.
