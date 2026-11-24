@@ -445,3 +445,94 @@ class DashboardExtrasTests(unittest.TestCase):
         self.assertIn('getHours()', PAGE)
         self.assertIn('How much each signal counts', PAGE)
         self.assertNotIn('prefers-color-scheme', PAGE)          # theme follows the clock, not the OS
+
+
+class QuotesTests(unittest.TestCase):
+    STOOQ_OK = ("Symbol,Date,Time,Open,High,Low,Close,Volume\n^SPX,2026-11-23,16:05:00,6000,6050,5990,6040.5,0\n"
+                "^NDQ,2026-11-23,16:05:00,20000,20100,19900,20050,0\n^DJI,2026-11-23,16:05:00,N/D,N/D,N/D,N/D,N/D\n"
+                "^VIX,2026-11-23,16:05:00,15,17,14,16.5,0\n")
+
+    @staticmethod
+    def _fred(last_day="2026-11-20"):
+        base = {"SP500": 6000.0, "NASDAQCOM": 20000.0, "DJIA": 44000.0, "VIXCLS": 16.0}
+        return {k: f"observation_date,{k}\n2026-11-18,{v}\n2026-11-19,{v}\n{last_day},{v}\n" for k, v in base.items()}
+
+    def _http(self, stooq, fred=None, fail_fred=()):
+        fred = self._fred() if fred is None else fred
+        calls = []
+
+        class H:
+            def get(_s, url, params=None, **kw):
+                calls.append((url, params))
+                if "stooq" in url:
+                    if isinstance(stooq, Exception):
+                        raise stooq
+                    return stooq
+                sid = params["id"]
+                if sid in fail_fred or sid not in fred:
+                    raise RuntimeError("down")
+                return fred[sid]
+        return H(), calls
+
+    def test_parse_skips_unreadable_rows(self):
+        from msc.quotes import parse_stooq_quotes
+        got = parse_stooq_quotes(self.STOOQ_OK)
+        self.assertEqual(set(got), {"^spx", "^ndq", "^vix"})            # the N/D row is dropped
+        self.assertEqual(parse_stooq_quotes("<html>please get an apikey</html>"), {})
+
+    def test_delayed_quote_is_used_and_labelled_when_it_checks_out(self):
+        from msc.quotes import Quotes
+        http, _ = self._http(self.STOOQ_OK)
+        rows = {r["name"]: r for r in Quotes(http).get()["rows"]}
+        self.assertEqual(rows["S&P 500"]["source"], "delayed (Stooq)")
+        self.assertAlmostEqual(rows["S&P 500"]["change"], 6040.5 / 6000 - 1)   # against FRED's last close
+        self.assertEqual(rows["Dow"]["source"], "end of day (FRED)")           # its Stooq row was N/D
+        self.assertNotIn("Russell 2000", rows)                                 # nothing to cross-check: not shown
+
+    def test_implausible_quote_falls_back_to_end_of_day(self):
+        from msc.quotes import Quotes
+        bad = "Symbol,Date,Time,Open,High,Low,Close,Volume\n^SPX,2026-11-23,16:05:00,1,1,1,3000,0\n"   # wrong symbol or garbage
+        http, _ = self._http(bad)
+        payload = Quotes(http).get()
+        spx = [r for r in payload["rows"] if r["name"] == "S&P 500"][0]
+        self.assertEqual((spx["price"], spx["source"]), (6000.0, "end of day (FRED)"))
+        self.assertTrue(any("too far" in e for e in payload["errors"]))
+
+    def test_both_sources_down_gives_an_empty_strip_not_an_error(self):
+        from msc.quotes import Quotes
+        http, _ = self._http(RuntimeError("blocked"), fred={})
+        payload = Quotes(http).get()
+        self.assertEqual(payload["rows"], [])
+        self.assertTrue(payload["errors"])
+
+    def test_cached_for_ttl_then_refreshed(self):
+        from msc.quotes import Quotes
+        now = [0.0]
+        http, calls = self._http(self.STOOQ_OK)
+        q = Quotes(http, ttl=60, clock=lambda: now[0])
+        q.get()
+        n = len(calls)
+        now[0] = 30
+        q.get()
+        self.assertEqual(len(calls), n)                                        # served from cache
+        now[0] = 61
+        q.get()
+        self.assertGreater(len(calls), n)
+
+    def test_endpoint_needs_login_and_returns_rows(self):
+        c = conductor([Fixed(0.3)])
+        c.quotes.http = self._http(self.STOOQ_OK)[0]
+        cfg = Config(dash_password="secret", port=0)
+        server = web.serve(c, cfg, host="127.0.0.1")
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}/api/quotes"
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                urllib.request.urlopen(url)
+            self.assertEqual(cm.exception.code, 401)
+            req = urllib.request.Request(url, headers={"Authorization": "Basic " + base64.b64encode(b"admin:secret").decode()})
+            body = json.loads(urllib.request.urlopen(req).read())
+            self.assertTrue(body["rows"])
+        finally:
+            server.shutdown()
+            server.server_close()

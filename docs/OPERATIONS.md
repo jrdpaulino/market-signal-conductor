@@ -101,3 +101,15 @@ How to read the output: `hit_rate` and the Brier score against the base rate are
 `gate_would_say` is informational only. Consecutive 20-day outcomes overlap, so the real sample is far smaller
 than `scored_forecasts` suggests, and a few years is one market history. A pass here would be a reason to keep
 collecting live evidence, not a reason to trade.
+
+## Index strip
+
+The row of index cards under the page title (S&P 500, Nasdaq, Dow, Russell 2000, VIX) is delayed or end-of-day
+data, never live. Each card says its source and time.
+
+- **Stooq quote CSV** gives a delayed intraday price. Its symbols and layout are from memory and unverified, so every
+  Stooq price is checked against FRED's last close and ignored if implausibly far away.
+- **FRED daily CSV** is the fallback: the last close, one trading day behind.
+- If every card says "end of day (FRED)", Stooq is not answering from your host; the strip still works.
+- Results are cached for 60 seconds on the server, so open dashboards do not multiply requests. A failure only
+  removes cards, never breaks the page. The strip does not feed the model.

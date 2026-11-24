@@ -35,9 +35,13 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 6px;
 .inf{display:grid;grid-template-columns:150px 1fr 1fr;gap:6px 14px;align-items:center;margin:4px 0}.inf .hd{color:var(--mut);font-size:13px;font-weight:600}
 .track{position:relative;height:12px;background:var(--line);border-radius:6px;overflow:visible}.track>i{display:block;height:100%;border-radius:6px}.track>u{position:absolute;top:-3px;width:2px;height:18px;background:var(--mut)}
 .cap{font-size:12px;color:var(--mut)}@media (max-width:700px){.inf{grid-template-columns:130px 1fr}.inf .share{grid-column:1/-1;margin-bottom:8px}#infhead{display:none}.inf span{overflow-wrap:anywhere}}
+.quotes{display:flex;gap:10px;overflow-x:auto;margin:-6px 0 16px;padding-bottom:4px}.q{flex:0 0 auto;min-width:128px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.q b{display:block;font-size:12px;color:var(--mut);font-weight:600}.q .p{font-size:17px;font-weight:650;font-variant-numeric:tabular-nums}.q .c{font-size:13px;font-variant-numeric:tabular-nums}.q .s{font-size:11px;color:var(--mut)}
+.up{color:var(--good)}.dn{color:var(--bad)}
 .scroll{overflow-x:auto}.mut{color:var(--mut)}svg{width:100%;height:90px}
 </style></head><body><main>
 <div class="top"><h1>Market Signal Conductor</h1><button id="theme" class="ghost" title="Switch between automatic day/night, day and night"></button></div><div class="sub" id="asof">loading…</div>
+<div id="quotes" class="quotes"></div>
 <div class="card"><h2>Market cycle</h2><div class="big" id="regime">–</div><div class="mut" id="pup"></div><div id="belief"></div>
 <svg id="spark" viewBox="0 0 600 90" preserveAspectRatio="none"></svg></div>
 <div class="card"><h2>Signals</h2><table id="signals"></table></div>
@@ -103,7 +107,14 @@ async function load(){
 }
 $('theme').onclick=()=>mscTheme.cycle();mscTheme.apply();
 $('run').onclick=async()=>{$('runmsg').textContent='running…';const r=await fetch('/api/run',{method:'POST'});$('runmsg').textContent=r.ok?'done':'failed';load()};
-load();setInterval(load,60000);
+async function quotes(){
+ const q=$('quotes');try{const d=await (await fetch('/api/quotes')).json();q.replaceChildren();
+  if(!d.rows.length){q.append(el('span','Index quotes unavailable right now.','mut'));return}
+  d.rows.forEach(r=>{const c=el('div',undefined,'q');c.append(el('b',r.name));
+   c.append(el('span',r.price.toLocaleString(undefined,{maximumFractionDigits:2}),'p'));
+   const ch=r.change==null?el('div','–','c'):el('div',(r.change>=0?'\u25B2 +':'\u25BC ')+(100*r.change).toFixed(2)+'%','c '+(r.change>=0?'up':'dn'));c.append(ch);
+   c.append(el('div',r.source+', '+r.asof,'s'));q.append(c)})}catch(e){q.replaceChildren(el('span','Index quotes unavailable right now.','mut'))}}
+load();setInterval(load,60000);quotes();setInterval(quotes,60000);
 </script></body></html>"""
 
 
@@ -150,6 +161,11 @@ def make_handler(conductor, cfg, run_lock):
                 return self._deny()
             if self.path in ("/", "/index.html"):
                 return self._send(200, PAGE)
+            if self.path == "/api/quotes":
+                try:
+                    return self._send(200, json.dumps(conductor.quotes.get()), "application/json")
+                except Exception as exc:                  # the strip is a nicety: never an error page
+                    return self._send(200, json.dumps(dict(rows=[], errors=[str(exc)])), "application/json")
             if self.path == "/api/state":
                 return self._send(200, json.dumps(conductor.state()), "application/json")
             self._send(404, "not found", "text/plain")

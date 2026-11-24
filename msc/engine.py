@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from . import weights as W
 from .company import Companies
 from .execution.gate import check_gate, track_record
+from .quotes import Quotes
 from .markov import REGIMES, STOCK_STATES, RegimeModel, StockModel, logpdf
 from .signals.base import Context
 
@@ -24,6 +25,7 @@ class Conductor:
         self.cfg, self.store, self.http, self.signals, self.prices = cfg, store, http, signals, prices
         self.stock_model = StockModel()
         self.companies = Companies(http, store, cfg.sec_user_agent)
+        self.quotes = Quotes(http)
 
     # ---------------------------------------------------------------- model parameters
     def load_model(self):
