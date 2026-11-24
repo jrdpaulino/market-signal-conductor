@@ -6,6 +6,11 @@ was public then. The others are left out rather than faked: prediction markets, 
 rewindable history. Insider filings (Form 4) could be replayed honestly by filing date, but a full replay is
 thousands of filings a day, so it is shelved until a bulk source is checked.
 
+Walk-forward refit (optional): every `refit_every` replayed days the model is re-fitted with `Conductor.learn(as_of=day)`,
+which sees only data and outcomes known by that day, then used for the days that follow. That is the honest version
+of running `learn` on this history. The report always includes a Brier decomposition (calibration versus
+discrimination).
+
 Safeguards:
   * Everything goes into a SEPARATE database. The live track record, the weights and the trading gate never see it.
   * Walk-forward only: each day's reliability weights use outcomes known by that day (weights.compute_weights).
@@ -22,7 +27,7 @@ from datetime import date
 
 from . import weights as W
 from .engine import Conductor
-from .execution.gate import check_gate
+from .execution.gate import brier_decomposition, check_gate
 from .signals import macro_fred, price_anchor  # noqa: F401  (registers them)
 from .signals.base import REGISTRY
 from .store import Store
@@ -44,9 +49,9 @@ class CachingHttp:
         return self.cache[key]
 
 
-def backfill_path(cfg):
+def backfill_path(cfg, tag="backfill"):
     base, ext = os.path.splitext(cfg.db_path)
-    return f"{base}.backfill{ext or '.sqlite'}"
+    return f"{base}.{tag}{ext or '.sqlite'}"
 
 
 def replay_days(prices, start, end, step):
@@ -54,23 +59,43 @@ def replay_days(prices, start, end, step):
     return days[::step]
 
 
-def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None):
-    """Replay [start, end] into db_path and return a report dict. `prices` is the full price history callable."""
+def fresh_store(cfg, db_path):
+    """A new empty database for the replay. An old backfill database is replaced; anything else is refused."""
     if os.path.abspath(db_path) == os.path.abspath(cfg.db_path):
         raise ValueError("backfill must use its own database, never the live one")
+    if os.path.exists(db_path):
+        old = Store(db_path)
+        is_backfill = old.kv_get("backfill_db") is not None
+        has_data = bool(old.obs_days())
+        old.db.close()
+        if has_data and not is_backfill:
+            raise ValueError(f"{db_path} holds data that is not a backfill database; choose another --db")
+        os.remove(db_path)                                  # start clean: a stale fitted model would leak into the replay
     store = Store(db_path)
+    store.kv_set("backfill_db", 1)
+    return store
+
+
+def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, refit_every=0, refit_after=120):
+    """Replay [start, end] into db_path and return a report dict. `prices` is the full price history callable.
+    refit_every > 0: walk-forward re-fit of the model every that many replayed days, once refit_after have passed."""
+    store = fresh_store(cfg, db_path)
     cond = Conductor(cfg, store, CachingHttp(http), [REGISTRY[n]() for n in BACKFILL_SIGNALS], prices)
     days = replay_days(prices(), start, end, step)
     if not days:
         raise RuntimeError(f"no trading days between {start} and {end} in the price history")
+    refits = 0
     for i, day in enumerate(days):
         cond.run_day(day)
+        if refit_every and i + 1 >= refit_after and (i + 1 - refit_after) % refit_every == 0:
+            if cond.learn(as_of=day).get("fitted"):
+                refits += 1
         if progress and (i + 1) % 100 == 0:
             progress(i + 1, len(days), day)
-    return report(cond, days, step)
+    return report(cond, days, step, refit_every, refits)
 
 
-def report(cond, days, step):
+def report(cond, days, step, refit_every=0, refits=0):
     track = cond.track()
     passed, reasons = check_gate(track) if track["n"] else (False, ["no scored forecasts"])
     health = {}
@@ -78,6 +103,7 @@ def report(cond, days, step):
         health.setdefault(row[0], {})[row[1]] = row[2]
     return dict(
         first_day=days[0], last_day=days[-1], days_replayed=len(days), step_days=step, horizon=cond.cfg.horizon,
+        walk_forward_refit=dict(every_days=refit_every, refits_done=refits) if refit_every else "off",
         scored_forecasts=track["n"], hit_rate=track["hit_rate"], brier=track["brier"],
         brier_base_rate=track["brier_base"],
         beats_base_rate=(track["brier"] is not None and track["brier"] < track["brier_base"]),
@@ -85,6 +111,7 @@ def report(cond, days, step):
         final_weights={k: dict(weight=round(v["weight"], 3), n=v["n"],
                                corr=None if v["corr"] is None else round(v["corr"], 3))
                        for k, v in cond.store.latest_weights().items()},
+        brier_breakdown=brier_decomposition(cond.scored_forecasts()),
         signal_days=health,
         signal_overlap=[dict(r, note="moves closely with the other: partly double-counted") if abs(r["corr"]) >= OVERLAP_FLAG else r
                         for r in W.signal_overlap(cond.store)],

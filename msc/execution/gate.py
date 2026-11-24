@@ -43,3 +43,30 @@ def check_gate(track):
         if wilson_lower(track["hits"], track["n"]) <= 0.5:
             reasons.append("hit rate is not distinguishable from a coin flip")
     return (not reasons), reasons
+
+
+def brier_decomposition(pairs, bins=10):
+    """Why a Brier score is what it is. pairs: [(p_up, outcome 0/1)].
+
+    brier ~ reliability - resolution + uncertainty (Murphy), with forecasts grouped into `bins` bins:
+      uncertainty  how hard the question is (base rate x (1 - base rate)); nothing can beat it by luck alone
+      reliability  calibration error: forecasts that say 55% when it happens 65% (lower is better)
+      resolution   discrimination: do high forecasts really precede more ups than low ones (higher is better)
+    bias is the mean forecast minus the base rate. brier_if_level_fixed is the Brier score after shifting every
+    forecast by -bias (clipped to 0..1): how much of the shortfall was only the overall level being wrong."""
+    n = len(pairs)
+    if not n:
+        return None
+    base = sum(o for _p, o in pairs) / n
+    mean_f = sum(p for p, _o in pairs) / n
+    groups = {}
+    for p, o in pairs:
+        groups.setdefault(min(bins - 1, int(p * bins)), []).append((p, o))
+    rel = sum(len(g) * (sum(p for p, _ in g) / len(g) - sum(o for _, o in g) / len(g)) ** 2 for g in groups.values()) / n
+    res = sum(len(g) * (sum(o for _, o in g) / len(g) - base) ** 2 for g in groups.values()) / n
+    shift = mean_f - base
+    fixed = sum((min(1.0, max(0.0, p - shift)) - o) ** 2 for p, o in pairs) / n
+    return dict(n=n, base_rate=round(base, 4), mean_forecast=round(mean_f, 4), bias=round(shift, 4),
+                brier=round(sum((p - o) ** 2 for p, o in pairs) / n, 4), uncertainty=round(base * (1 - base), 4),
+                reliability=round(rel, 4), resolution=round(res, 4), brier_if_level_fixed=round(fixed, 4),
+                note="reliability = calibration error (lower is better); resolution = discrimination (higher is better)")

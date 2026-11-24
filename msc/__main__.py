@@ -35,6 +35,8 @@ def main(argv=None):
     b.add_argument("--end", help="ISO date, default: today")
     b.add_argument("--step", type=int, default=1, help="replay every Nth trading day (default 1)")
     b.add_argument("--db", help="output database, default: <MSC_DB>.backfill.sqlite")
+    b.add_argument("--refit-every", type=int, default=0, help="walk-forward re-fit of the model every N replayed days, after the first 120 (0 = never)")
+    b.add_argument("--compare", action="store_true", help="run twice (no re-fit, then re-fit every 63 days) and compare")
     d = sub.add_parser("pm-debug", help="show what each prediction-market venue returns for a search pattern")
     d.add_argument("pattern", nargs="?", default="recession|rate cut|fed")
     a = ap.parse_args(argv)
@@ -60,10 +62,20 @@ def main(argv=None):
         end = a.end or today_utc()
         start = a.start or _d.fromisoformat(end).replace(year=_d.fromisoformat(end).year - 5).isoformat()
         out = a.db or backfill_path(cfg)
-        print(f"replaying {start} .. {end} into {out} (the live database is not touched)")
-        result = run_backfill(cfg, cond.http, cond.prices, start, end, out, max(1, a.step),
-                              progress=lambda i, n, d: print(f"  {i}/{n} days, at {d}"))
-        print(json.dumps(result, indent=2, default=str))
+        prog = lambda i, n, d: print(f"  {i}/{n} days, at {d}")
+        step = max(1, a.step)
+        if a.compare:
+            print(f"replaying {start} .. {end}, twice: plain and with a walk-forward re-fit every 63 days")
+            plain = run_backfill(cfg, cond.http, cond.prices, start, end, out, step, prog)
+            refit = run_backfill(cfg, cond.http, cond.prices, start, end, backfill_path(cfg, "backfill.refit"), step, prog,
+                                 refit_every=63)
+            keys = ("walk_forward_refit", "scored_forecasts", "hit_rate", "brier", "brier_base_rate", "beats_base_rate", "brier_breakdown")
+            print(json.dumps(dict(compare={"plain": {k: plain[k] for k in keys}, "walk_forward_refit": {k: refit[k] for k in keys}},
+                                  plain=plain, walk_forward_refit=refit), indent=2, default=str))
+        else:
+            print(f"replaying {start} .. {end} into {out} (the live database is not touched)")
+            print(json.dumps(run_backfill(cfg, cond.http, cond.prices, start, end, out, step, prog,
+                                          refit_every=max(0, a.refit_every)), indent=2, default=str))
     elif a.cmd == "pm-debug":
         import re
         from .signals.base import Context

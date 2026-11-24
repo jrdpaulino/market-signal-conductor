@@ -76,7 +76,10 @@ series and the S&P 500 trend) day by day, and reports how the model would have d
 python -m msc backfill --start 2021-01-01 --end 2026-11-20
 ```
 
-Options: `--step 5` (every 5th trading day, faster), `--db path` (output file; default `<MSC_DB>.backfill.sqlite`).
+Options: `--step 5` (every 5th trading day, faster), `--db path` (output file; default `<MSC_DB>.backfill.sqlite`;
+an old backfill file is replaced, a database that is not a backfill is refused), `--refit-every 63` (walk-forward
+re-fit of the model every 63 replayed days, after the first 120), and `--compare` (runs plain and re-fit and prints
+them side by side).
 It needs the same internet access as a normal run and takes a few minutes for five years.
 
 What keeps it honest:
@@ -88,6 +91,11 @@ What keeps it honest:
 - **Only replayable signals.** Prediction markets, news, social and `anomaly_flow` are left out: their sources
   cannot be rewound, and faking them would put hindsight in. Insider filings could be replayed by filing date
   but are shelved for now (volume).
+
+The report includes `brier_breakdown`: `bias` (mean forecast minus the base rate), `reliability` (calibration error,
+lower is better), `resolution` (discrimination, higher is better) and `brier_if_level_fixed` (the score if only the
+overall level were corrected). A model can lose to the base rate purely because its average is off, with no signal
+problem at all; this shows which case you are in.
 
 How to read the output: `hit_rate` and the Brier score against the base rate are the numbers that matter;
 `gate_would_say` is informational only. Consecutive 20-day outcomes overlap, so the real sample is far smaller

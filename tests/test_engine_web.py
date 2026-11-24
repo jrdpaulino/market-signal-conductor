@@ -251,8 +251,8 @@ class CompanyTests(unittest.TestCase):
         self.assertEqual((row["company"], row["industry"]), ("Apple Inc.", "Electronic Computers"))
 
 
-class BackfillTests(unittest.TestCase):
-    """Replay on synthetic FRED data: separate database, no look-ahead, honest report."""
+class _FredFake:
+    """Synthetic FRED CSV downloads for the backfill tests."""
 
     @staticmethod
     def _csv(series, n=1400, base=1.0, wobble=0.5):
@@ -276,6 +276,11 @@ class BackfillTests(unittest.TestCase):
                 H.calls += 1
                 return data[params["id"]]
         return H
+
+
+
+class BackfillTests(_FredFake, unittest.TestCase):
+    """Replay on synthetic FRED data: separate database, no look-ahead, honest report."""
 
     def test_replay_is_separate_cached_and_reported(self):
         from msc.backfill import backfill_path, run_backfill
@@ -322,3 +327,75 @@ class OverlapTests(unittest.TestCase):
         self.assertEqual((rows[0]["a"], rows[0]["b"]), ("a", "b"))
         self.assertGreater(rows[0]["corr"], 0.95)
         self.assertEqual(W.signal_overlap(store, min_days=500), [])
+
+
+class BackfillExtrasTests(_FredFake, unittest.TestCase):
+    def _setup(self):
+        from msc.prices import FredPrices
+        http = self._http()()
+        cfg = Config(db_path=os.path.join(tempfile.mkdtemp(), "live.sqlite"))
+        prices = FredPrices(http)
+        return cfg, http, prices, [d for d, _o, _c in prices()]
+
+    def test_walk_forward_refit_runs_and_reports_the_breakdown(self):
+        from msc.backfill import backfill_path, run_backfill
+        cfg, http, prices, days = self._setup()
+        res = run_backfill(cfg, http, prices, days[600], days[-1], backfill_path(cfg), step=7, refit_every=10, refit_after=40)
+        self.assertGreater(res["walk_forward_refit"]["refits_done"], 3)
+        b = res["brier_breakdown"]
+        self.assertAlmostEqual(b["brier"], b["reliability"] - b["resolution"] + b["uncertainty"], delta=0.02)
+
+    def test_rerun_starts_clean_and_foreign_databases_are_refused(self):
+        from msc.backfill import backfill_path, run_backfill
+        cfg, http, prices, days = self._setup()
+        out = backfill_path(cfg)
+        a = run_backfill(cfg, http, prices, days[600], days[-1], out, step=9)
+        b = run_backfill(cfg, http, prices, days[600], days[-1], out, step=9)       # same result: no stale model carried over
+        self.assertEqual((a["brier"], a["hit_rate"]), (b["brier"], b["hit_rate"]))
+        foreign = os.path.join(tempfile.mkdtemp(), "mine.sqlite")
+        s = Store(foreign)
+        s.put_obs([Observation("x", "2026-01-02", "market", "", 0.1)])
+        s.db.close()
+        with self.assertRaises(ValueError):
+            run_backfill(cfg, http, prices, days[600], days[-1], foreign, step=9)
+        self.assertTrue(os.path.exists(foreign))
+
+    def test_learn_as_of_ignores_outcomes_after_that_day(self):
+        from msc.engine import Conductor
+        cfg = Config(db_path=os.path.join(tempfile.mkdtemp(), "t.sqlite"))
+        prices = make_prices(200)
+        store = Store(os.path.join(tempfile.mkdtemp(), "t.sqlite"))
+        for k in range(120):
+            store.put_obs([Observation("s", prices[k][0], "market", "", ((k % 9) - 4) / 4)])
+        c = Conductor(cfg, store, None, [], lambda: prices)
+        c.learn(as_of=prices[130][0])
+        fit_asof = store.kv_get("model")["p_up"]
+        store2 = Store(os.path.join(tempfile.mkdtemp(), "t2.sqlite"))
+        for k in range(120):
+            store2.put_obs([Observation("s", prices[k][0], "market", "", ((k % 9) - 4) / 4)])
+        c2 = Conductor(cfg, store2, None, [], lambda: prices[:131])                # the future was never available
+        c2.learn()
+        self.assertEqual(fit_asof, store2.kv_get("model")["p_up"])
+
+
+class BrierBreakdownTests(unittest.TestCase):
+    def test_calibrated_but_uninformative_forecast(self):
+        from msc.execution.gate import brier_decomposition
+        pairs = [(0.6, 1)] * 60 + [(0.6, 0)] * 40
+        b = brier_decomposition(pairs)
+        self.assertAlmostEqual(b["reliability"], 0.0, places=6)
+        self.assertAlmostEqual(b["resolution"], 0.0, places=6)
+        self.assertAlmostEqual(b["brier"], b["uncertainty"], places=3)
+
+    def test_bias_is_found_and_fixing_the_level_helps(self):
+        from msc.execution.gate import brier_decomposition
+        pairs = [(0.45, 1)] * 65 + [(0.45, 0)] * 35                                # says 45% when it is 65%
+        b = brier_decomposition(pairs)
+        self.assertAlmostEqual(b["bias"], -0.20, places=3)
+        self.assertLess(b["brier_if_level_fixed"], b["brier"])
+        self.assertGreater(b["reliability"], 0.03)
+
+    def test_discrimination_shows_up_as_resolution(self):
+        from msc.execution.gate import brier_decomposition
+        pairs = [(0.2, 0)] * 40 + [(0.2, 1)] * 10 + [(0.8, 1)] * 40 + [(0.8, 0)] * 10
+        self.assertAlmostEqual(brier_decomposition(pairs)["resolution"], 0.09, places=6)   # outcome rates 0.2 / 0.8 around 0.5

@@ -294,8 +294,9 @@ load through `MSC_EXTRA_MODULES`. See `msc/signals/_template.py`.
 through the same `Conductor`, into a separate database. It exists to show how the model would have done, not to
 feed the gate. Rules: the live database is never written; each replayed day's reliability weights use only
 outcomes known by that day (`compute_weights` ignores prices after the evaluation day); the model is not re-fit on
-the replayed data. The report also lists which signals move together (`signal_overlap`), because the model combines
-signals as if independent.
+the replayed data unless a walk-forward refit is asked for (`learn(as_of=day)` sees only what was known by then). The
+report also lists which signals move together (`signal_overlap`), because the model combines signals as if
+independent, and splits the Brier score into calibration and discrimination.
 
 ## Design decisions
 

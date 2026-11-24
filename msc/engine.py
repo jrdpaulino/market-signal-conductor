@@ -117,9 +117,22 @@ class Conductor:
         return track_record(self.store.forecasts(), lambda d, h: (
             None if (r := W.forward_return(prices, d, h)) is None else int(r > 0)))
 
+    def scored_forecasts(self):
+        """[(p_up, outcome)] for every forecast whose outcome is now known."""
+        prices = self.price_history()
+        out = []
+        for d, h, p, _r in self.store.forecasts():
+            r = W.forward_return(prices, d, h)
+            if r is not None:
+                out.append((p, int(r > 0)))
+        return out
+
     # ---------------------------------------------------------------- learning from history
-    def learn(self):
-        """Re-fit the regime model's transitions, signal means and P(up) from everything stored."""
+    def learn(self, as_of=None):
+        """Re-fit the regime model's transitions, signal means and P(up) from everything stored.
+
+        `as_of` (used by the backfill's walk-forward refit) hides prices after that day, so an outcome counts only
+        once it was known by then. Live runs leave it unset: prices already end today."""
         weights = {s: (v["weight"],) for s, v in self.store.latest_weights().items()}
         days = self.store.obs_days()
         seq = []
@@ -132,8 +145,9 @@ class Conductor:
         if gammas is None:
             return dict(fitted=False, reason=f"only {len(seq)} days of market readings, need 10")
         ups, gs = [], []
+        prices = [p for p in self.price_history() if as_of is None or p[0] <= as_of]
         for (d, _o), g in zip(seq, gammas):
-            r = W.forward_return(self.price_history(), d, self.cfg.horizon)
+            r = W.forward_return(prices, d, self.cfg.horizon)
             if r is not None:
                 ups.append(int(r > 0))
                 gs.append(g)
