@@ -47,7 +47,7 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 6px;
 <div class="card"><h2>Signals</h2><table id="signals"></table></div>
 <div class="card"><h2>How much each signal counts</h2>
 <p class="mut" id="infnote"></p><div id="influence"></div>
-<h2 style="margin-top:18px">Weights over time</h2><div class="scroll"><svg id="wlines" viewBox="0 0 680 190" style="height:190px;min-width:600px"></svg></div></div>
+<h2 style="margin-top:18px">Weights over time</h2><p class="mut" id="wnote"></p><div class="scroll"><svg id="wlines" viewBox="0 0 680 190" style="height:190px;min-width:600px"></svg></div></div>
 <div class="card"><h2>Strongest stocks</h2><div class="scroll"><table id="strong"></table></div></div>
 <div class="card"><h2>Weakest stocks</h2><div class="scroll"><table id="weak"></table></div></div>
 <div class="card"><h2>Track record and trading gate</h2><div id="track"></div><div id="gate"></div>
@@ -89,6 +89,7 @@ async function load(){
  const wl=$('wlines');wl.replaceChildren();const ns='http://www.w3.org/2000/svg';
  const colorOf=n=>{const k=(s.influence||[]).findIndex(x=>x.name===n);return 'var(--c'+((k<0?0:k)%8)+')'};
  const names=Object.keys(s.weight_history||{});const days=[...new Set(names.flatMap(n=>s.weight_history[n].map(p=>p[0])))].sort();
+ $('wnote').textContent=days.length>1?(Math.max(0,...(s.signals||[]).map(x=>x.pairs))<12?'All lines stay at the 0.30 starting trust until a signal has 12 scored outcomes (each takes '+s.horizon+' trading days to resolve), so they sit on top of each other for now.':''):'Needs at least two daily runs to draw. Lines then stay flat at the 0.30 starting trust until a signal has 12 scored outcomes (each takes '+s.horizon+' trading days to resolve).';
  if(days.length>1){const X=d=>40+520*days.indexOf(d)/(days.length-1),Y=w=>170-150*w;
   const mk=(t,at)=>{const e=document.createElementNS(ns,t);for(const k in at)e.setAttribute(k,at[k]);return e};
   [0,0.3,1].forEach(v=>{wl.append(mk('line',{x1:40,x2:560,y1:Y(v),y2:Y(v),stroke:'currentColor','stroke-opacity':v===0.3?.5:.15,'stroke-dasharray':v===0.3?'4 4':'0'}));
