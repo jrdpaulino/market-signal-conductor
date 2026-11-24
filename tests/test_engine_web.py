@@ -404,3 +404,44 @@ class BrierBreakdownTests(unittest.TestCase):
         from msc.execution.gate import brier_decomposition
         pairs = [(0.2, 0)] * 40 + [(0.2, 1)] * 10 + [(0.8, 1)] * 40 + [(0.8, 0)] * 10
         self.assertAlmostEqual(brier_decomposition(pairs)["resolution"], 0.09, places=6)   # outcome rates 0.2 / 0.8 around 0.5
+
+
+class DashboardExtrasTests(unittest.TestCase):
+    def setUp(self):
+        from msc.engine import Conductor
+        from msc.signals.base import Signal
+        outer = self
+
+        class Up(Signal):
+            name, description, needs = "up", "x", ()
+
+            def collect(self, ctx):
+                return [Observation("up", ctx.day, "market", "", 0.6, 0.8)]
+
+        class Quiet(Signal):
+            name, description, needs = "quiet", "x", ()
+
+            def collect(self, ctx):
+                return []
+        self.prices = make_prices(120)
+        cfg = Config(db_path=os.path.join(tempfile.mkdtemp(), "d.sqlite"))
+        self.c = Conductor(cfg, Store(cfg.db_path), None, [Up(), Quiet()], lambda: self.prices)
+        for d, _o, _c in self.prices[40:80]:
+            self.c.run_day(d)
+
+    def test_state_reports_influence_and_weight_history(self):
+        s = self.c.state()
+        by = {x["name"]: x for x in s["influence"]}
+        self.assertAlmostEqual(by["up"]["share"], 1.0)
+        self.assertGreater(by["up"]["pull"], 0)
+        self.assertIsNone(by["quiet"]["score"])                 # no reading today: no say
+        self.assertEqual(by["quiet"]["share"], 0.0)
+        self.assertGreater(len(s["weight_history"]["up"]), 5)
+        json.dumps(s)
+
+    def test_page_has_day_night_theme_and_influence_card(self):
+        from msc.web import PAGE
+        self.assertIn('data-theme', PAGE)
+        self.assertIn('getHours()', PAGE)
+        self.assertIn('How much each signal counts', PAGE)
+        self.assertNotIn('prefers-color-scheme', PAGE)          # theme follows the clock, not the OS

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from . import weights as W
 from .company import Companies
 from .execution.gate import check_gate, track_record
-from .markov import REGIMES, STOCK_STATES, RegimeModel, StockModel
+from .markov import REGIMES, STOCK_STATES, RegimeModel, StockModel, logpdf
 from .signals.base import Context
 
 UNIFORM = [0.25] * 4
@@ -156,6 +156,29 @@ class Conductor:
         self.store.kv_set("model", model.to_dict())
         return dict(fitted=True, days=len(seq), outcomes=len(gs))
 
+    def influence(self, day):
+        """Per signal, how much it counts on `day`: trust (weight), its share of the total say (weight x confidence),
+        and the pull it exerts: how far it separates the most and least likely regimes, and toward which."""
+        if not day:
+            return []
+        model, weights = self.load_model(), self.store.latest_weights()
+        w = {s: (v["weight"],) for s, v in weights.items()}
+        market = self._by_signal([o for o in self.store.obs_on(day) if o.scope == "market"], w)
+        total = sum(v[1] for v in market.values())
+        out = []
+        for sig in self.signals:
+            weight = weights.get(sig.name, {}).get("weight", W.PRIOR_WEIGHT)
+            if sig.name in market:
+                x, eff = market[sig.name]
+                mu, sd = model.emission(sig.name)
+                ll = [eff * logpdf(x, mu[i], sd[i]) for i in range(4)]
+                top = max(range(4), key=lambda i: ll[i])
+                out.append(dict(name=sig.name, weight=weight, effective=eff, share=eff / total if total else 0.0,
+                                score=x, pull=max(ll) - min(ll), leans=REGIMES[top]))
+            else:
+                out.append(dict(name=sig.name, weight=weight, effective=0.0, share=0.0, score=None, pull=0.0, leans=""))
+        return out
+
     # ---------------------------------------------------------------- dashboard payload
     def state(self):
         beliefs = self.store.beliefs()
@@ -191,4 +214,5 @@ class Conductor:
                 weakest=[dict(ticker=t, tilt=tl, p_strong=b[2], p_weak=b[0], day=d, evidence=evidence[t]["signals"],
                               company=info[t]["name"], industry=info[t]["industry"]) for t, tl, b, d in weak],
                 states=list(STOCK_STATES)),
+            influence=self.influence(latest[0] if latest else None), weight_history=self.store.weight_history(),
             track=track, gate=dict(passed=passed, reasons=reasons))

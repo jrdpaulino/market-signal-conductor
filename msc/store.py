@@ -119,6 +119,15 @@ class Store:
             out[s] = dict(day=d, weight=w, n=n, corr=c)
         return out
 
+    def weight_history(self, days=120):
+        """{signal: [[day, weight]]} for the last `days` calendar days that have weights."""
+        rows = self._all("SELECT day, signal, weight FROM signal_weights WHERE day >= "
+                         "(SELECT date(max(day), ?) FROM signal_weights) ORDER BY day", (f"-{int(days)} day",))
+        out = {}
+        for d, sig, w in rows:
+            out.setdefault(sig, []).append([d, w])
+        return out
+
     # ---- key/value scratch space for plugins and model parameters
     def kv_get(self, key, default=None):
         rows = self._all("SELECT value FROM kv WHERE key=?", (key,))
