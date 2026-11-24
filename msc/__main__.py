@@ -8,6 +8,7 @@ from . import scheduler, web
 from .config import Config, load_dotenv
 from .engine import Conductor, today_utc
 from .http import Http
+from .logs import write_log
 from .prices import FredPrices, StooqPrices
 from .signals.base import load_signals
 from .store import Store
@@ -17,6 +18,15 @@ def build(cfg):
     http = Http()
     prices = StooqPrices(http, cfg.price_symbol) if cfg.price_source == "stooq" else FredPrices(http)
     return Conductor(cfg, Store(cfg.db_path), http, load_signals(cfg), prices)
+
+
+def backfill_summary(name, r):
+    pl = r.get("placebo")
+    best = pl["results"][0] if isinstance(pl, dict) and pl.get("results") else None
+    return (f"[{name}] commit {r.get('commit')}  forecasts {r['scored_forecasts']}  hit {r['hit_rate']:.3f}  "
+            f"brier {r['brier']:.4f}  running base {r['brier_running_base_rate']:.4f}  hindsight base {r['brier_base_rate']:.4f}  "
+            f"gate {r['gate_would_say']}"
+            + (f"  best placebo p {best['p']} ({best['signal']})" if best else ""))
 
 
 def main(argv=None):
@@ -70,14 +80,20 @@ def main(argv=None):
             plain = run_backfill(cfg, cond.http, cond.prices, start, end, out, step, prog, placebo=a.placebo)
             refit = run_backfill(cfg, cond.http, cond.prices, start, end, backfill_path(cfg, "backfill.refit"), step, prog,
                                  refit_every=63, placebo=a.placebo)
-            keys = ("walk_forward_refit", "scored_forecasts", "hit_rate", "brier", "brier_base_rate", "brier_running_base_rate", "beats_running_base_rate", "beats_base_rate",
-                    "brier_breakdown", "brier_breakdown_raw")
-            print(json.dumps(dict(compare={"plain": {k: plain[k] for k in keys}, "walk_forward_refit": {k: refit[k] for k in keys}},
-                                  plain=plain, walk_forward_refit=refit), indent=2, default=str))
+            keys = ("walk_forward_refit", "scored_forecasts", "hit_rate", "brier", "brier_base_rate", "brier_running_base_rate",
+                    "beats_running_base_rate", "beats_base_rate", "brier_breakdown", "brier_breakdown_raw")
+            full = dict(compare={"plain": {k: plain[k] for k in keys}, "walk_forward_refit": {k: refit[k] for k in keys}},
+                        plain=plain, walk_forward_refit=refit)
+            path = write_log("backfill", json.dumps(full, indent=2, default=str))
+            for name, r in (("plain", plain), ("re-fit", refit)):
+                print(backfill_summary(name, r))
         else:
             print(f"replaying {start} .. {end} into {out} (the live database is not touched)")
-            print(json.dumps(run_backfill(cfg, cond.http, cond.prices, start, end, out, step, prog,
-                                          refit_every=max(0, a.refit_every)), indent=2, default=str))
+            r = run_backfill(cfg, cond.http, cond.prices, start, end, out, step, prog,
+                             refit_every=max(0, a.refit_every), placebo=a.placebo)
+            path = write_log("backfill", json.dumps(r, indent=2, default=str))
+            print(backfill_summary("run", r))
+        print("full report:", path)
     elif a.cmd == "pm-debug":
         import re
         from .signals.base import Context

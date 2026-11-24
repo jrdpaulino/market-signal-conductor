@@ -93,3 +93,19 @@ class PlaceboTests(unittest.TestCase):
         stress_score(vals, 63, min_history=120)
         with self.assertRaises(RuntimeError):
             stress_score(vals[:100], 63, min_history=120)
+
+
+class LogFileTests(unittest.TestCase):
+    def test_write_log_names_file_with_commit_and_returns_path(self):
+        import tempfile
+        from msc.logs import write_log
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"MSC_LOG_DIR": d, "MSC_COMMIT": "abc1234"}):
+            path = write_log("backfill", "hello")
+            self.assertTrue(path.endswith("-abc1234.txt") and os.path.basename(path).startswith("backfill-"))
+            self.assertEqual(open(path, encoding="utf-8").read(), "hello\n")
+
+    def test_backfill_summary_is_one_line(self):
+        from msc.__main__ import backfill_summary
+        r = dict(commit="abc", scored_forecasts=5, hit_rate=0.6, brier=0.24, brier_running_base_rate=0.25,
+                 brier_base_rate=0.23, gate_would_say="fail", placebo="off")
+        self.assertNotIn("\n", backfill_summary("run", r))

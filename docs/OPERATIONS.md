@@ -71,6 +71,14 @@ GitHub pauses scheduled workflows after 60 days without repository activity, so 
 | Prediction markets match nothing | `fly ssh console -C "python -m msc pm-debug recession"` shows what each venue returns; adjust `MSC_PM_RULES` |
 | `social` fails with 404 or 429 | Reddit blocks cloud hosts. Remove it: `fly secrets set MSC_SIGNALS=sec_filings,prediction_markets,journals_news,price_anchor,macro_curve,macro_credit,macro_vix,macro_labor,macro_conditions,anomaly_flow` |
 
+## Logs
+
+Long output goes to text files in `logs/` (override with `MSC_LOG_DIR`; git-ignored), named
+`<kind>-<date>-<time>-<commit>.txt`. `python -m tests` runs every test and writes the full output to
+`logs/tests-...txt`, printing only the verdict and the failing test names. `python -m msc backfill` writes the full JSON report
+to `logs/backfill-...txt` and prints one summary line per run plus the path. Plain `python -m unittest` still works
+and prints everything.
+
 ## Backfill: replaying history
 
 `python -m msc backfill` replays the signals that can be rebuilt honestly from past data (the FRED macro series
