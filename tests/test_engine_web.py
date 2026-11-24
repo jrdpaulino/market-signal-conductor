@@ -359,6 +359,11 @@ class BackfillExtrasTests(_FredFake, unittest.TestCase):
         with self.assertRaises(ValueError):
             run_backfill(cfg, http, prices, days[600], days[-1], foreign, step=9)
         self.assertTrue(os.path.exists(foreign))
+        legacy = os.path.join(tempfile.mkdtemp(), "live.backfill.sqlite")           # made before the marker existed
+        s = Store(legacy)
+        s.put_obs([Observation("x", "2026-01-02", "market", "", 0.1)])
+        s.db.close()
+        run_backfill(cfg, http, prices, days[600], days[-1], legacy, step=9)         # replaced, not refused
 
     def test_learn_as_of_ignores_outcomes_after_that_day(self):
         from msc.engine import Conductor

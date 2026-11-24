@@ -65,7 +65,8 @@ def fresh_store(cfg, db_path):
         raise ValueError("backfill must use its own database, never the live one")
     if os.path.exists(db_path):
         old = Store(db_path)
-        is_backfill = old.kv_get("backfill_db") is not None
+        # marked by this version, or named like the default backfill files (made before the marker existed)
+        is_backfill = old.kv_get("backfill_db") is not None or ".backfill" in os.path.basename(db_path)
         has_data = bool(old.obs_days())
         old.db.close()
         if has_data and not is_backfill:
