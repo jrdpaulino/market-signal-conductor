@@ -26,6 +26,7 @@ macro_conditions is excluded from the backfill: the Chicago Fed re-estimates the
 a replay would use revised numbers nobody had at the time.
 """
 import csv
+from bisect import bisect_right
 import io
 import math
 import statistics
@@ -41,8 +42,22 @@ CREDIT_MIN_HISTORY = 120  # FRED serves only about three years of this ICE serie
 Z_WINDOW = 1260          # about five years of trading days
 
 
+_PARSED = {}        # text -> rows. A backfill asks for the same CSV every replayed day; parse it once.
+
+
 def parse_fred_csv(text):
     """[(iso_day, value)] oldest first. Missing values ('.', blank, 'NaN') are skipped."""
+    hit = _PARSED.get(text)
+    if hit is not None:
+        return hit
+    rows = _parse_fred_csv(text)
+    if len(_PARSED) >= 16:
+        _PARSED.clear()
+    _PARSED[text] = rows
+    return rows
+
+
+def _parse_fred_csv(text):
     rows = []
     reader = csv.reader(io.StringIO(text))
     next(reader, None)                                   # header: "DATE,<id>" or "observation_date,<id>"
@@ -63,7 +78,8 @@ def fetch_series(ctx, series_id, lag_days=0, stale_days=STALE_DAYS):
     """History available on ctx.day, or raise if the series is empty or stale.
     lag_days: a reading counts only once that many days have passed since its date (release delay)."""
     cutoff = (date.fromisoformat(ctx.day) - timedelta(days=lag_days)).isoformat()
-    rows = [(d, v) for d, v in parse_fred_csv(ctx.http.get(FRED_CSV, params={"id": series_id})) if d <= cutoff]
+    all_rows = parse_fred_csv(ctx.http.get(FRED_CSV, params={"id": series_id}))
+    rows = all_rows[:bisect_right(all_rows, (cutoff, float("inf")))]      # readings dated on or before the cutoff
     if not rows:
         raise RuntimeError(f"FRED {series_id}: no usable data")
     age = (date.fromisoformat(ctx.day) - date.fromisoformat(rows[-1][0])).days

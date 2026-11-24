@@ -21,8 +21,13 @@ CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT);
 
 
 class Store:
-    def __init__(self, path):
+    def __init__(self, path, fast=False):
+        """fast=True is for throwaway databases (a backfill replay): no waiting for the disk after each write.
+        A crash could corrupt such a file, which is fine because it is rebuilt from scratch each run."""
         self.db = sqlite3.connect(path, check_same_thread=False)
+        if fast:
+            self.db.execute("PRAGMA synchronous=OFF")
+            self.db.execute("PRAGMA journal_mode=MEMORY")
         self.lock = threading.RLock()
         with self.lock:
             self.db.executescript(SCHEMA)

@@ -77,15 +77,10 @@ def compute_weights(store, prices, horizon, today):
     if prices:
         prices = [p for p in prices if p[0] <= today]        # an outcome is known only once its last price is in the past
     for sig in {o for o in _signals(store)}:
-        xs, ys = [], []
-        for day, score, _conf in store.market_series(sig):
-            if day >= today:
-                continue
-            r = forward_return(prices, day, horizon) if prices else None
-            if r is not None:
-                xs.append(score)
-                ys.append(r)
-        out[sig] = weight_from_pairs(xs, ys)
+        series = [(day, score) for day, score, _conf in store.market_series(sig) if day < today]
+        rets = forward_returns(prices, [d for d, _s in series], horizon) if prices else []   # one pass, not one per day
+        pairs = [(sc, r) for (_d, sc), r in zip(series, rets) if r is not None]
+        out[sig] = weight_from_pairs([sc for sc, _r in pairs], [r for _sc, r in pairs])
     return out
 
 

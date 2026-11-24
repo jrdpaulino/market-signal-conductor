@@ -109,3 +109,37 @@ class LogFileTests(unittest.TestCase):
         r = dict(commit="abc", scored_forecasts=5, hit_rate=0.6, brier=0.24, brier_running_base_rate=0.25,
                  brier_base_rate=0.23, gate_would_say="fail", placebo="off")
         self.assertNotIn("\n", backfill_summary("run", r))
+
+
+class SpeedupEquivalenceTests(unittest.TestCase):
+    def test_bulk_weights_match_the_one_day_at_a_time_calculation(self):
+        import random
+        from msc import weights as W
+        from msc.models import Observation
+        from tests.test_core import make_prices
+        prices = make_prices(300, seed=4)
+        rng = random.Random(2)
+        s = Store(":memory:")
+        s.put_obs([Observation("sig", p[0], "market", "", rng.uniform(-1, 1), 1.0, {}) for p in prices])
+        today = prices[250][0]
+        known = [p for p in prices if p[0] <= today]
+        xs, ys = [], []
+        for d, sc, _c in s.market_series("sig"):
+            if d < today and (r := W.forward_return(known, d, 20)) is not None:
+                xs.append(sc)
+                ys.append(r)
+        self.assertEqual(W.compute_weights(s, prices, 20, today)["sig"], W.weight_from_pairs(xs, ys))
+
+    def test_fred_parse_cache_and_cutoff(self):
+        from msc.signals.macro_fred import parse_fred_csv
+        text = "DATE,X\n2026-01-01,1\n2026-01-02,2\n"
+        self.assertEqual(parse_fred_csv(text), [("2026-01-01", 1.0), ("2026-01-02", 2.0)])
+        self.assertIs(parse_fred_csv(text), parse_fred_csv(text))
+
+    def test_fast_store_still_stores(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            s = Store(os.path.join(d, "x.sqlite"), fast=True)
+            s.kv_set("k", 1)
+            self.assertEqual(s.kv_get("k"), 1)
+            s.close()

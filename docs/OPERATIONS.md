@@ -92,7 +92,7 @@ Options: `--step 5` (every 5th trading day, faster), `--db path` (output file; d
 an old backfill file is replaced, a database that is not a backfill is refused), `--refit-every 63` (walk-forward
 re-fit of the model every 63 replayed days, after the first 120), and `--compare` (runs plain and re-fit and prints
 them side by side).
-It needs the same internet access as a normal run and takes a few minutes for five years.
+It needs the same internet access as a normal run and is mostly waiting on the downloads (a minute or two for five years); the replay itself takes seconds.
 
 What keeps it honest:
 

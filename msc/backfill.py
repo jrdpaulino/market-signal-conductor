@@ -74,7 +74,7 @@ def fresh_store(cfg, db_path):
         if has_data and not is_backfill:
             raise ValueError(f"{db_path} holds data that is not a backfill database; choose another --db")
         os.remove(db_path)                                  # start clean: a stale fitted model would leak into the replay
-    store = Store(db_path)
+    store = Store(db_path, fast=True)
     store.kv_set("backfill_db", 1)
     return store
 
