@@ -95,7 +95,10 @@ def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, 
                 refits += 1
         if progress and (i + 1) % 100 == 0:
             progress(i + 1, len(days), day)
-    return report(cond, days, step, refit_every, refits, placebo)
+    try:
+        return report(cond, days, step, refit_every, refits, placebo)
+    finally:
+        store.close()          # Windows cannot delete or replace a SQLite file that is still open
 
 
 def signal_errors(store):

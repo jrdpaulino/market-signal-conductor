@@ -28,6 +28,10 @@ class Store:
             self.db.executescript(SCHEMA)
             self.db.commit()
 
+    def close(self):
+        with self.lock:
+            self.db.close()
+
     def _run(self, sql, args=(), many=False):
         with self.lock:
             cur = self.db.executemany(sql, args) if many else self.db.execute(sql, args)
