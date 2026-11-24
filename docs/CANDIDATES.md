@@ -22,6 +22,7 @@ and then by showing up in live, out-of-sample scoring. As of 2026-11-23 none of 
 | Insider filings (EDGAR) | Clusters of insider buying or selling | SEC EDGAR Form 4 | Shelved | Needs a historical backfill built from filing dates. |
 | Unusual options or trade flow | Flag abnormal activity ahead of news | `anomaly_flow` covers prediction-market and price jumps only | Partly built | The options-flow idea has no free historical data and a high false-positive risk. |
 | Academic ideas | Check recent papers (for example Guo, RFS 2025) for testable signals | Paper dependent | To review | Read the paper, list the exact inputs, then test as above. |
+| Text signals (GPU) | Score text with a language model run offline: tone of filings, headlines and posts, or change in a company's filing language | SEC filings first (free, timestamped); news and transcripts need paid history | Later | Needs years of text with real publication times. Beware look-ahead leakage from models trained after the events. Effects tend to be stock-level and short-lived, so the per-stock tilts may fit better than the S&P forecast. Only start if a cheaper candidate shows something real. |
 | Contrarian commentary (for example inverse Cramer) | Fade a pundit's calls | Scraped, unstable | Dropped | Not pursued. |
 
 ## Rules for adding to this list
