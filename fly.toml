@@ -1,5 +1,5 @@
 # Fly.io config. Change `app` to a unique name. One machine only: SQLite lives on a single volume.
-app = "market-signal-conductor"
+app = "msc-jrdp"
 primary_region = "ord"
 
 [build]

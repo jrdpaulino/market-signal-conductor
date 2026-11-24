@@ -45,7 +45,7 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 6px;
 <div class="card"><h2>Market cycle</h2><div class="big" id="regime">–</div><div class="mut" id="pup"></div><div class="mut" id="calib" style="font-size:13px"></div><div id="belief"></div>
 <svg id="spark" viewBox="0 0 600 90" preserveAspectRatio="none"></svg></div>
 <div class="card"><h2>Signals</h2><table id="signals"></table></div>
-<div class="card"><h2>How much each signal counts</h2>
+<div class="card"><h2>Signal Weights</h2>
 <p class="mut" id="infnote"></p><div id="influence"></div>
 <h2 style="margin-top:18px">Weights over time</h2><p class="mut" id="wnote"></p><div class="scroll"><svg id="wlines" viewBox="0 0 680 190" style="height:190px;min-width:600px"></svg></div></div>
 <div class="card"><h2>Strongest stocks</h2><div class="scroll"><table id="strong"></table></div></div>
