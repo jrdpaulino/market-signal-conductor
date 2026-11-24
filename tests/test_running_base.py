@@ -203,3 +203,34 @@ class TargetTests(unittest.TestCase):
         self.assertEqual(res["target"], "drawdown")
         self.assertGreater(res["scored_forecasts"], 20)
         self.assertIn("falls more than", res["target_means"])
+
+
+class SplitAndLongCreditTests(unittest.TestCase):
+    def _run(self, **kw):
+        from msc.backfill import backfill_path, run_backfill
+        from tests.test_engine_web import BackfillExtrasTests
+        t = BackfillExtrasTests("test_walk_forward_refit_runs_and_reports_the_breakdown")
+        cfg, http, prices, days = t._setup()
+        return run_backfill(cfg, http, prices, days[300], days[-1], backfill_path(cfg), step=3, placebo=20, **kw)
+
+    def test_split_reports_each_slice_and_sign_consistency(self):
+        res = self._run(split=2)
+        sp = res["split"]
+        self.assertEqual(len(sp["parts"]), 2)
+        self.assertLess(sp["parts"][0]["last_day"], sp["parts"][1]["first_day"])
+        self.assertEqual(sum(p["scored_forecasts"] for p in sp["parts"]), res["scored_forecasts"])
+        self.assertIn("same_sign_in_every_part", sp)
+
+    def test_split_off_by_default_and_too_few_forecasts_is_reported(self):
+        self.assertEqual(self._run()["split"], "off")
+        self.assertIn("error", self._run(split=40)["split"])
+
+    def test_signals_option_limits_the_replay(self):
+        res = self._run(signal_names=["price_anchor"])
+        self.assertEqual(list(res["signal_days"]), ["price_anchor"])
+
+    def test_long_credit_signal_is_registered_and_backfillable(self):
+        from msc.backfill import BACKFILL_SIGNALS
+        from msc.signals.base import REGISTRY
+        self.assertIn("macro_credit_long", REGISTRY)
+        self.assertIn("macro_credit_long", BACKFILL_SIGNALS)

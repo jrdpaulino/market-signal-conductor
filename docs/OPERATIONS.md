@@ -118,6 +118,14 @@ target. The assumed P(up) per regime is tuned for direction, so for other target
 the running base rate, which the calibration step fits to the real level. Example:
 `python -m msc backfill --start 2021-01-01 --target drawdown`.
 
+Longer history and slices: `macro_credit_long` uses Moody's Baa minus the 10-year Treasury (FRED `BAA10Y`, back to 1986)
+where the ICE high-yield spread only goes back about three years. It overlaps `macro_credit`; to replay one
+without the other use `--signals price_anchor,macro_curve,macro_credit_long,macro_vix,macro_labor`. `--split N` also scores N
+consecutive slices of the history on their own (hit rate, Brier against the running base rate, each signal's link
+and placebo p inside the slice) and reports whether each signal keeps its sign in every slice. The default price
+source (FRED) has only about ten years of S&P history; for longer replays set `MSC_PRICE_SOURCE=stooq`.
+Example: `python -m msc backfill --start 1995-01-01 --split 3`.
+
 Two yardsticks: `brier_base_rate` uses the whole period's up-rate (hindsight, nothing can know it in advance);
 `brier_running_base_rate` uses only outcomes already known at each forecast date, which is what a naive forecaster
 could really have said. Beating the running one is the fairer test; the gate still uses the hindsight one.

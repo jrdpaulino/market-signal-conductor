@@ -48,6 +48,8 @@ def main(argv=None):
     b.add_argument("--refit-every", type=int, default=0, help="walk-forward re-fit of the model every N replayed days, after the first 120 (0 = never)")
     b.add_argument("--target", default=None, help="what to forecast: direction (default), drawdown or vol_down")
     b.add_argument("--horizon", type=int, default=None, help="trading days ahead (default: MSC_HORIZON, 20)")
+    b.add_argument("--signals", default=None, help="comma list of signals to replay (default: the backfillable set)")
+    b.add_argument("--split", type=int, default=0, help="also score N consecutive slices of the history separately (2 = halves)")
     b.add_argument("--placebo", type=int, default=200, help="time-rotated placebo copies of each signal to compare against (0 = skip)")
     b.add_argument("--compare", action="store_true", help="run twice (no re-fit, then re-fit every 63 days) and compare")
     d = sub.add_parser("pm-debug", help="show what each prediction-market venue returns for a search pattern")
@@ -74,6 +76,12 @@ def main(argv=None):
         from dataclasses import replace
         from .backfill import backfill_path, run_backfill
         from .weights import TARGETS
+        names = [n.strip() for n in a.signals.split(",") if n.strip()] if a.signals else None
+        if names:
+            from .backfill import BACKFILL_SIGNALS
+            bad = [n for n in names if n not in BACKFILL_SIGNALS]
+            if bad:
+                ap.error(f"cannot replay {bad}; backfillable signals: {', '.join(BACKFILL_SIGNALS)}")
         if a.target is not None and a.target not in TARGETS:
             ap.error(f"--target must be one of {', '.join(TARGETS)}")
         if a.target is not None or a.horizon is not None:      # research variants only change this replay, never the live setting
@@ -86,9 +94,9 @@ def main(argv=None):
         step = max(1, a.step)
         if a.compare:
             print(f"replaying {start} .. {end}, twice: plain and with a walk-forward re-fit every 63 days")
-            plain = run_backfill(cfg, cond.http, cond.prices, start, end, out, step, prog, placebo=a.placebo)
+            plain = run_backfill(cfg, cond.http, cond.prices, start, end, out, step, prog, placebo=a.placebo, signal_names=names, split=a.split)
             refit = run_backfill(cfg, cond.http, cond.prices, start, end, backfill_path(cfg, "backfill.refit"), step, prog,
-                                 refit_every=63, placebo=a.placebo)
+                                 refit_every=63, placebo=a.placebo, signal_names=names, split=a.split)
             keys = ("walk_forward_refit", "scored_forecasts", "hit_rate", "brier", "brier_base_rate", "brier_running_base_rate",
                     "beats_running_base_rate", "beats_base_rate", "brier_breakdown", "brier_breakdown_raw")
             full = dict(compare={"plain": {k: plain[k] for k in keys}, "walk_forward_refit": {k: refit[k] for k in keys}},
@@ -99,7 +107,7 @@ def main(argv=None):
         else:
             print(f"replaying {start} .. {end} into {out} (the live database is not touched)")
             r = run_backfill(cfg, cond.http, cond.prices, start, end, out, step, prog,
-                             refit_every=max(0, a.refit_every), placebo=a.placebo)
+                             refit_every=max(0, a.refit_every), placebo=a.placebo, signal_names=names, split=a.split)
             path = write_log("backfill", json.dumps(r, indent=2, default=str))
             print(backfill_summary("run", r))
         print("full report:", path)

@@ -153,6 +153,18 @@ class MacroCredit(Signal):
 
 
 @register
+class MacroCreditLong(Signal):
+    name = "macro_credit_long"
+    description = "Moody's Baa corporate yield minus the 10-year Treasury: a credit-stress gauge with history back to 1986 (FRED)."
+
+    def collect(self, ctx):
+        rows = fetch_series(ctx, "BAA10Y")
+        score, zl, zc = stress_score([v for _d, v in rows], change_lag=63)
+        return [Observation(self.name, ctx.day, "market", "", score, 1.0,
+                            {"spread_pct": rows[-1][1], "z_level": round(zl, 2), "z_change_3m": round(zc, 2)})]
+
+
+@register
 class MacroVix(Signal):
     name = "macro_vix"
     description = "VIX: high or rising means fear (FRED)."

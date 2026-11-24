@@ -145,7 +145,7 @@ def signal_overlap(store, min_days=30):
     return sorted(out, key=lambda r: -abs(r["corr"]))
 
 
-def placebo_test(store, prices, horizon, k=200, min_shift=130, seed=0, target="direction"):
+def placebo_test(store, prices, horizon, k=200, min_shift=130, seed=0, target="direction", first=None, last=None):
     """Is a signal's link to forward returns more than luck? For each signal, its daily score series is rotated
     in time by a random amount (at least min_shift days) against the returns, k times. A rotation keeps the
     signal's own slowness and the returns' own streaks but breaks any real timing, so those correlations show what
@@ -154,7 +154,7 @@ def placebo_test(store, prices, horizon, k=200, min_shift=130, seed=0, target="d
     rng = random.Random(seed)
     rows, usable = [], []
     for sig in sorted(_signals(store)):
-        series = [(d, s) for d, s, c in store.market_series(sig) if c > 0]
+        series = [(d, s) for d, s, c in store.market_series(sig) if c > 0 and (first is None or d >= first) and (last is None or d <= last)]
         rets = forward_returns(prices, [d for d, _ in series], horizon, target)
         pairs = [(s, r) for (_d, s), r in zip(series, rets) if r is not None]
         if len(pairs) >= 2 * min_shift:

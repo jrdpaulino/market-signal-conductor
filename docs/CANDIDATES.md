@@ -19,6 +19,7 @@ and then by showing up in live, out-of-sample scoring. As of 2026-11-23 none of 
 | Index moves | Trend of the S&P 500, Nasdaq and Dow as separate signals | FRED `SP500`, `NASDAQCOM`, `DJIA` (daily) | Not built | Highly correlated with each other and with `price_anchor`, so likely redundant. Test, don't assume. |
 | Index spreads | Nasdaq vs Dow, Russell 2000 vs S&P 500 as a risk-on / risk-off gauge | FRED `NASDAQCOM`, `DJIA`, `SP500`, `RU2000PR` | Not built | Less redundant than raw moves. The `RU2000PR` id is unverified. |
 | Other targets | Same signals against 5-day moves, volatility or drawdown instead of 20-day direction | Existing | Built: `--target` and `--horizon` on the backfill | Hypothesis: macro signals say more about risk than direction. Not yet run. |
+| Longer credit history | Moody's Baa minus 10-year Treasury, back to 1986 | FRED `BAA10Y` | Built: `macro_credit_long` | Overlaps `macro_credit`. Use for long replays. |
 | Insider filings (EDGAR) | Clusters of insider buying or selling | SEC EDGAR Form 4 | Shelved | Needs a historical backfill built from filing dates. |
 | Unusual options or trade flow | Flag abnormal activity ahead of news | `anomaly_flow` covers prediction-market and price jumps only | Partly built | The options-flow idea has no free historical data and a high false-positive risk. |
 | Academic ideas | Check recent papers (for example Guo, RFS 2025) for testable signals | Paper dependent | To review | Read the paper, list the exact inputs, then test as above. |

@@ -29,13 +29,13 @@ from datetime import date
 from . import weights as W
 from .engine import Conductor
 from .version import commit_id
-from .execution.gate import brier_decomposition, check_gate
+from .execution.gate import brier_decomposition, check_gate, track_record
 from .signals import macro_fred, price_anchor  # noqa: F401  (registers them)
 from .signals.base import REGISTRY
 from .store import Store
 
 OVERLAP_FLAG = 0.6
-BACKFILL_SIGNALS = ("price_anchor", "macro_curve", "macro_credit", "macro_vix", "macro_labor")
+BACKFILL_SIGNALS = ("price_anchor", "macro_curve", "macro_credit", "macro_credit_long", "macro_vix", "macro_labor")
 
 
 class CachingHttp:
@@ -79,11 +79,11 @@ def fresh_store(cfg, db_path):
     return store
 
 
-def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, refit_every=0, refit_after=120, placebo=200):
+def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, refit_every=0, refit_after=120, placebo=200, signal_names=None, split=0):
     """Replay [start, end] into db_path and return a report dict. `prices` is the full price history callable.
     refit_every > 0: walk-forward re-fit of the model every that many replayed days, once refit_after have passed."""
     store = fresh_store(cfg, db_path)
-    cond = Conductor(cfg, store, CachingHttp(http), [REGISTRY[n]() for n in BACKFILL_SIGNALS], prices)
+    cond = Conductor(cfg, store, CachingHttp(http), [REGISTRY[n]() for n in (signal_names or BACKFILL_SIGNALS)], prices)
     days = replay_days(prices(), start, end, step)
     if not days:
         raise RuntimeError(f"no trading days between {start} and {end} in the price history")
@@ -96,7 +96,7 @@ def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, 
         if progress and (i + 1) % 100 == 0:
             progress(i + 1, len(days), day)
     try:
-        return report(cond, days, step, refit_every, refits, placebo)
+        return report(cond, days, step, refit_every, refits, placebo, split)
     finally:
         store.close()          # Windows cannot delete or replace a SQLite file that is still open
 
@@ -125,7 +125,41 @@ def signal_errors(store):
     return result
 
 
-def report(cond, days, step, refit_every=0, refits=0, placebo=200):
+def split_report(cond, parts, placebo_k=200):
+    """The same questions asked separately of consecutive slices of the replay. A real effect shows up in every
+    slice with the same sign; one that exists in a single slice (often one bear market) is probably an episode.
+    Each slice is scored on its own: hit rate, Brier against the running base rate, and for every signal its link
+    to the target with a placebo p-value computed inside that slice."""
+    prices = cond.price_history()
+    tgt, hz = cond.cfg.target, cond.cfg.horizon
+    rows = cond.store.forecasts()
+    known = [r for r, v in zip(rows, W.forward_returns(prices, [x[0] for x in rows], hz, tgt)) if v is not None]
+    if len(known) < parts * 40:
+        return dict(error=f"only {len(known)} scored forecasts, too few for {parts} parts")
+    size = len(known) // parts
+    out, signs = [], {}
+    for i in range(parts):
+        chunk = known[i * size:(i + 1) * size if i < parts - 1 else len(known)]
+        first, last = chunk[0][0], chunk[-1][0]
+        track = track_record(chunk, lambda d, h: (None if (r := W.forward_return(prices, d, h, tgt)) is None else int(r > 0)),
+                             exit_of=lambda d, h: W.forward_exit_days(prices, [d], h)[0])
+        pl = W.placebo_test(cond.store, prices, hz, placebo_k, min_shift=min(130, max(20, size // 4)), target=tgt,
+                            first=first, last=last) if placebo_k else None
+        sigs = [dict(signal=r["signal"], n=r["n"], corr=r["corr"], p=r["p"]) for r in (pl or {}).get("results", [])]
+        for r in sigs:
+            signs.setdefault(r["signal"], []).append(r["corr"])
+        out.append(dict(part=i + 1, first_day=first, last_day=last, scored_forecasts=track["n"],
+                        hit_rate=track["hit_rate"], brier=track["brier"], brier_running_base_rate=track["brier_running"],
+                        beats_running_base_rate=(track["brier"] is not None and track["brier_running"] is not None
+                                                 and track["brier"] < track["brier_running"]),
+                        signals=sigs))
+    same = {sig: (len(c) == parts and (all(x > 0 for x in c) or all(x < 0 for x in c))) for sig, c in signs.items()}
+    return dict(parts=out, same_sign_in_every_part=same,
+                note="A real effect keeps its sign and a small p in every part. One strong part and weak others "
+                     "points to a single episode.")
+
+
+def report(cond, days, step, refit_every=0, refits=0, placebo=200, split=0):
     track = cond.track()
     passed, reasons = check_gate(track) if track["n"] else (False, ["no scored forecasts"])
     health = {}
@@ -148,6 +182,7 @@ def report(cond, days, step, refit_every=0, refits=0, placebo=200):
         brier_breakdown_raw=brier_decomposition(cond.scored_forecasts(raw=True)),
         calibration_now=cond.store.kv_get("calib"),
         placebo=W.placebo_test(cond.store, cond.price_history(), cond.cfg.horizon, placebo, target=cond.cfg.target) if placebo else "off",
+        split=split_report(cond, split, placebo) if split and split > 1 else "off",
         signal_days=health, signal_errors=signal_errors(cond.store), commit=commit_id(),
         signal_overlap=[dict(r, note="moves closely with the other: partly double-counted") if abs(r["corr"]) >= OVERLAP_FLAG else r
                         for r in W.signal_overlap(cond.store)],
