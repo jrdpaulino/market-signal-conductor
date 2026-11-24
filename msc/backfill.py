@@ -79,7 +79,7 @@ def fresh_store(cfg, db_path):
     return store
 
 
-def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, refit_every=0, refit_after=120):
+def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, refit_every=0, refit_after=120, placebo=200):
     """Replay [start, end] into db_path and return a report dict. `prices` is the full price history callable.
     refit_every > 0: walk-forward re-fit of the model every that many replayed days, once refit_after have passed."""
     store = fresh_store(cfg, db_path)
@@ -95,7 +95,7 @@ def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, 
                 refits += 1
         if progress and (i + 1) % 100 == 0:
             progress(i + 1, len(days), day)
-    return report(cond, days, step, refit_every, refits)
+    return report(cond, days, step, refit_every, refits, placebo)
 
 
 def signal_errors(store):
@@ -108,7 +108,7 @@ def signal_errors(store):
     return out
 
 
-def report(cond, days, step, refit_every=0, refits=0):
+def report(cond, days, step, refit_every=0, refits=0, placebo=200):
     track = cond.track()
     passed, reasons = check_gate(track) if track["n"] else (False, ["no scored forecasts"])
     health = {}
@@ -129,6 +129,7 @@ def report(cond, days, step, refit_every=0, refits=0):
         brier_breakdown=brier_decomposition(cond.scored_forecasts()),
         brier_breakdown_raw=brier_decomposition(cond.scored_forecasts(raw=True)),
         calibration_now=cond.store.kv_get("calib"),
+        placebo=W.placebo_test(cond.store, cond.price_history(), cond.cfg.horizon, placebo) if placebo else "off",
         signal_days=health, signal_errors=signal_errors(cond.store), commit=commit_id(),
         signal_overlap=[dict(r, note="moves closely with the other: partly double-counted") if abs(r["corr"]) >= OVERLAP_FLAG else r
                         for r in W.signal_overlap(cond.store)],

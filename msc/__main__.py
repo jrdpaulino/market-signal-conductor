@@ -36,6 +36,7 @@ def main(argv=None):
     b.add_argument("--step", type=int, default=1, help="replay every Nth trading day (default 1)")
     b.add_argument("--db", help="output database, default: <MSC_DB>.backfill.sqlite")
     b.add_argument("--refit-every", type=int, default=0, help="walk-forward re-fit of the model every N replayed days, after the first 120 (0 = never)")
+    b.add_argument("--placebo", type=int, default=200, help="time-rotated placebo copies of each signal to compare against (0 = skip)")
     b.add_argument("--compare", action="store_true", help="run twice (no re-fit, then re-fit every 63 days) and compare")
     d = sub.add_parser("pm-debug", help="show what each prediction-market venue returns for a search pattern")
     d.add_argument("pattern", nargs="?", default="recession|rate cut|fed")
@@ -66,9 +67,9 @@ def main(argv=None):
         step = max(1, a.step)
         if a.compare:
             print(f"replaying {start} .. {end}, twice: plain and with a walk-forward re-fit every 63 days")
-            plain = run_backfill(cfg, cond.http, cond.prices, start, end, out, step, prog)
+            plain = run_backfill(cfg, cond.http, cond.prices, start, end, out, step, prog, placebo=a.placebo)
             refit = run_backfill(cfg, cond.http, cond.prices, start, end, backfill_path(cfg, "backfill.refit"), step, prog,
-                                 refit_every=63)
+                                 refit_every=63, placebo=a.placebo)
             keys = ("walk_forward_refit", "scored_forecasts", "hit_rate", "brier", "brier_base_rate", "brier_running_base_rate", "beats_running_base_rate", "beats_base_rate",
                     "brier_breakdown", "brier_breakdown_raw")
             print(json.dumps(dict(compare={"plain": {k: plain[k] for k in keys}, "walk_forward_refit": {k: refit[k] for k in keys}},

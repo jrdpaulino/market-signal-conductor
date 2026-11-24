@@ -5,6 +5,7 @@ only outcomes already known on the evaluation day (no peeking). The weight rises
 falls with a negative one, and sits at a low starting value until there is enough evidence.
 """
 import math
+import random
 from bisect import bisect_right
 
 PRIOR_WEIGHT = 0.30      # an unproven signal gets this much say
@@ -110,3 +111,34 @@ def signal_overlap(store, min_days=30):
             if corr == corr:
                 out.append(dict(a=a, b=b, n=len(days), corr=round(corr, 3)))
     return sorted(out, key=lambda r: -abs(r["corr"]))
+
+
+def placebo_test(store, prices, horizon, k=200, min_shift=130, seed=0):
+    """Is a signal's link to forward returns more than luck? For each signal, its daily score series is rotated
+    in time by a random amount (at least min_shift days) against the returns, k times. A rotation keeps the
+    signal's own slowness and the returns' own streaks but breaks any real timing, so those correlations show what
+    noise would have looked like. p = share of rotations whose |corr| is at least the real |corr| (+1 smoothing).
+    p_adjusted multiplies by the number of signals tested, because the best of many always looks good by luck."""
+    rng = random.Random(seed)
+    rows, usable = [], []
+    for sig in sorted(_signals(store)):
+        series = [(d, s) for d, s, c in store.market_series(sig) if c > 0]
+        rets = forward_returns(prices, [d for d, _ in series], horizon)
+        pairs = [(s, r) for (_d, s), r in zip(series, rets) if r is not None]
+        if len(pairs) >= 2 * min_shift:
+            usable.append((sig, [s for s, _ in pairs], [r for _, r in pairs]))
+    for sig, x, y in usable:
+        real = pearson(x, y)
+        if real != real:
+            continue
+        n, hits = len(x), 0
+        for _ in range(k):
+            off = rng.randint(min_shift, n - min_shift)
+            c = pearson(x[off:] + x[:off], y)
+            hits += c == c and abs(c) >= abs(real)
+        p = (hits + 1) / (k + 1)
+        rows.append(dict(signal=sig, n=n, corr=round(real, 3), p=round(p, 3),
+                         p_adjusted=round(min(1.0, p * len(usable)), 3)))
+    return dict(rotations=k, signals_tested=len(usable), results=sorted(rows, key=lambda r: r["p"]),
+                note="Small p means the link is unlikely to be luck. Overlapping 20-day returns make p optimistic; "
+                     "a negative corr with small p means the signal points the wrong way, still not usable as is.")

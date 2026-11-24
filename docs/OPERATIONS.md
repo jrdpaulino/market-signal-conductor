@@ -104,6 +104,11 @@ problem at all; this shows which case you are in.
 Two yardsticks: `brier_base_rate` uses the whole period's up-rate (hindsight, nothing can know it in advance);
 `brier_running_base_rate` uses only outcomes already known at each forecast date, which is what a naive forecaster
 could really have said. Beating the running one is the fairer test; the gate still uses the hindsight one.
+`placebo` rotates each signal's score series in time against the returns (200 times, `--placebo K`, 0 to skip) and
+reports `p`: the share of rotations that correlated at least as strongly as the real series. `p_adjusted` multiplies
+by the number of signals tested, since the best of many looks good by luck. A small p with a negative `corr` means
+the signal points the wrong way. `macro_credit` now needs 120 readings instead of 250, because FRED serves only
+about three years of that series.
 `signal_errors` lists why a signal failed (error text, days, first and last day).
 
 How to read the output: `hit_rate` and the Brier score against the base rate are the numbers that matter;

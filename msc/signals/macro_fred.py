@@ -37,6 +37,7 @@ from .base import Signal, register
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
 STALE_DAYS = 7
 MIN_HISTORY = 250
+CREDIT_MIN_HISTORY = 120  # FRED serves only about three years of this ICE series, so 250 left the first year dark
 Z_WINDOW = 1260          # about five years of trading days
 
 
@@ -76,11 +77,11 @@ def zscore(x, sample):
     return (x - statistics.fmean(sample)) / sd if sd > 1e-12 else 0.0
 
 
-def stress_score(values, change_lag):
+def stress_score(values, change_lag, min_history=MIN_HISTORY):
     """Bearish-when-high score from a level series: average of the level's z-score and the z-score of its recent
     change, each against the series' own trailing history. Returns (score in [-1, 0.. +1], z_level, z_change)."""
-    if len(values) < MIN_HISTORY:
-        raise RuntimeError(f"need {MIN_HISTORY} observations, have {len(values)}")
+    if len(values) < min_history:
+        raise RuntimeError(f"need {min_history} observations, have {len(values)}")
     hist = values[-Z_WINDOW:]
     changes = [hist[i] - hist[i - change_lag] for i in range(change_lag, len(hist))]
     z_level = zscore(hist[-1], hist)
@@ -130,7 +131,7 @@ class MacroCredit(Signal):
 
     def collect(self, ctx):
         rows = fetch_series(ctx, "BAMLH0A0HYM2")
-        score, zl, zc = stress_score([v for _d, v in rows], change_lag=63)
+        score, zl, zc = stress_score([v for _d, v in rows], change_lag=63, min_history=CREDIT_MIN_HISTORY)
         return [Observation(self.name, ctx.day, "market", "", score, 1.0,
                             {"spread_pct": rows[-1][1], "z_level": round(zl, 2), "z_change_3m": round(zc, 2)})]
 

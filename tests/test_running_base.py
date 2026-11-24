@@ -47,3 +47,47 @@ class VersionAndErrorsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlaceboTests(unittest.TestCase):
+    def _store(self, prices, horizon, skill):
+        import random
+        from msc import weights as W
+        from msc.models import Observation
+        rng = random.Random(5)
+        days = [p[0] for p in prices]
+        rets = W.forward_returns(prices, days, horizon)
+        s = Store(":memory:")
+        obs = []
+        for d, r in zip(days, rets):
+            real = 0.0 if r is None else max(-1, min(1, r * 15))
+            obs.append(Observation("good", d, "market", "", max(-1, min(1, skill * real + rng.gauss(0, .4))), 1.0, {}))
+            obs.append(Observation("noise", d, "market", "", rng.uniform(-1, 1), 1.0, {}))
+        s.put_obs(obs)
+        return s
+
+    def test_real_signal_beats_placebos_and_noise_does_not(self):
+        from msc import weights as W
+        from tests.test_core import make_prices
+        prices = make_prices(800, seed=3)
+        s = self._store(prices, 20, skill=1.0)
+        out = W.placebo_test(s, prices, 20, k=100)
+        by = {r["signal"]: r for r in out["results"]}
+        self.assertLess(by["good"]["p"], 0.05)
+        self.assertGreater(by["noise"]["p"], 0.05)
+        self.assertEqual(out["signals_tested"], 2)
+        self.assertGreaterEqual(by["good"]["p_adjusted"], by["good"]["p"])
+
+    def test_too_little_data_tests_nothing(self):
+        from msc import weights as W
+        from tests.test_core import make_prices
+        prices = make_prices(200, seed=3)
+        out = W.placebo_test(self._store(prices, 20, 1.0), prices, 20, k=10)
+        self.assertEqual(out["signals_tested"], 0)
+
+    def test_credit_needs_fewer_readings(self):
+        from msc.signals.macro_fred import stress_score
+        vals = [3.0 + 0.01 * (i % 7) for i in range(130)]
+        stress_score(vals, 63, min_history=120)
+        with self.assertRaises(RuntimeError):
+            stress_score(vals[:100], 63, min_history=120)
