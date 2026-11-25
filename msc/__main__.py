@@ -1,4 +1,4 @@
-"""Command line:  python -m msc serve | run-once | learn | signals | status"""
+"""Command line:  python -m msc serve | run-once | learn | signals | status | backfill | stock-prices | stock-score"""
 import argparse
 import json
 import logging
@@ -59,6 +59,18 @@ def main(argv=None):
     b.add_argument("--split", type=int, default=0, help="also score N consecutive slices of the history separately (2 = halves)")
     b.add_argument("--placebo", type=int, default=200, help="time-rotated placebo copies of each signal to compare against (0 = skip)")
     b.add_argument("--compare", action="store_true", help="run twice (no re-fit, then re-fit every 63 days) and compare")
+    sp = sub.add_parser("stock-prices", help="download daily split-adjusted stock prices from Alpaca for per-stock scoring")
+    sp.add_argument("--dir", default=None, help="folder for <TICKER>.csv files (default: MSC_STOCK_PRICE_DIR, stock_prices)")
+    sp.add_argument("--tickers", default=None, help="comma list (default: MSC_EARNINGS_TICKERS or the watchlist); SPY is always added")
+    sp.add_argument("--start", default="2016-01-01", help="ISO date, default 2016-01-01 (about where Alpaca's free history starts)")
+    sp.add_argument("--end", default=None, help="ISO date, default today")
+    sp.add_argument("--refresh", action="store_true", help="download again even if a file exists")
+    ss = sub.add_parser("stock-score", help="score the per-stock readings in a database against each stock's excess return")
+    ss.add_argument("--db", default=None, help="database to score (default: the backfill database)")
+    ss.add_argument("--dir", default=None, help="price folder (default: MSC_STOCK_PRICE_DIR, stock_prices)")
+    ss.add_argument("--horizon", type=int, default=None, help="trading days ahead (default: MSC_HORIZON, 20)")
+    ss.add_argument("--split", type=int, default=0, help="also score N consecutive slices separately (2 = halves)")
+    ss.add_argument("--placebo", type=int, default=200, help="calendar-rotated placebo copies (0 = skip)")
     d = sub.add_parser("pm-debug", help="show what each prediction-market venue returns for a search pattern")
     d.add_argument("pattern", nargs="?", default="recession|rate cut|fed")
     a = ap.parse_args(argv)
@@ -123,6 +135,42 @@ def main(argv=None):
                              refit_every=max(0, a.refit_every), placebo=a.placebo, signal_names=names, split=a.split)
             path = write_log("backfill", json.dumps(r, indent=2, default=str))
             print(backfill_summary("run", r))
+            if isinstance(r.get("stock_scoring"), dict):
+                from .stock_scoring import stock_summary
+                print(stock_summary(r["stock_scoring"]))
+        print("full report:", path)
+    elif a.cmd == "stock-prices":
+        from . import alpaca
+        key, secret = alpaca.keys_from_env()
+        tickers = [t.strip().upper() for t in a.tickers.split(",") if t.strip()] if a.tickers else \
+            list(cfg.earnings_tickers or cfg.watchlist)
+        if "SPY" not in tickers:
+            tickers.append("SPY")                      # the benchmark, from the same feed as the stocks
+        folder = a.dir or cfg.stock_price_dir
+        print(f"downloading {len(tickers)} tickers into {folder} (existing files kept; --refresh to replace)")
+        status = alpaca.download(Http(min_interval=0.35), tickers, folder, a.start, a.end or today_utc(), key, secret,
+                                 refresh=a.refresh)
+        bad = [t for t, s in status.items() if not (s == "kept" or s[0].isdigit())]
+        print(f"done: {len(status) - len(bad)} ok" + (f", no data for {', '.join(bad)}" if bad else ""))
+    elif a.cmd == "stock-score":
+        import os
+        from .backfill import backfill_path
+        from .stock_scoring import DirStockPrices, stock_report, stock_summary
+        db = a.db or backfill_path(cfg)
+        if not os.path.exists(db):
+            raise SystemExit(f"no database at {db}; run a backfill first or pass --db")
+        folder = a.dir or cfg.stock_price_dir
+        stocks = DirStockPrices(folder)
+        if not stocks.tickers():
+            raise SystemExit(f"no price files in {folder}; run python -m msc stock-prices first")
+        store = Store(db)
+        try:
+            rep = stock_report(store, stocks, cond.prices, a.horizon or cfg.horizon, a.placebo, a.split)
+        finally:
+            store.close()
+        rep.update(database=db, price_folder=folder)
+        path = write_log("stock-score", json.dumps(rep, indent=2, default=str))
+        print(stock_summary(rep))
         print("full report:", path)
     elif a.cmd == "pm-debug":
         import re

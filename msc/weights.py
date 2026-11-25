@@ -2,7 +2,8 @@
 
 For each signal we pair its past market-level scores with what the benchmark actually did afterwards, using
 only outcomes already known on the evaluation day (no peeking). The weight rises with a positive correlation,
-falls with a negative one, and sits at a low starting value until there is enough evidence.
+falls with a negative one, and starts at a low value that fades as evidence accumulates, so a signal that shows no
+link after many outcomes ends near 0 rather than keeping an untested signal's say.
 """
 import math
 import random
@@ -12,6 +13,7 @@ PRIOR_WEIGHT = 0.30      # an unproven signal gets this much say
 MIN_PAIRS = 12           # below this many known outcomes, stay at the prior
 SHRINK_N = 30.0          # correlation is shrunk by n / (n + SHRINK_N)
 SLOPE = 3.0              # how fast the weight moves with (shrunk) correlation
+PRIOR_N = 250            # outcomes after which the starting weight has faded to half (about a year of daily runs)
 
 
 def pearson(x, y):
@@ -100,12 +102,15 @@ def forward_exit_days(prices, query_days, horizon):
 
 
 def weight_from_pairs(scores, returns):
+    """The starting weight fades as outcomes pile up (PRIOR_N), so after enough evidence the weight rests on the
+    signal's own record: a signal with no link drifts to about 0 instead of keeping the say of an untested one."""
     n = len(scores)
     corr = pearson(scores, returns) if n >= MIN_PAIRS else float("nan")
     if corr != corr:
         return PRIOR_WEIGHT, n, float("nan")
     shrunk = corr * n / (n + SHRINK_N)
-    return max(0.0, min(1.0, PRIOR_WEIGHT + SLOPE * shrunk)), n, corr
+    prior = PRIOR_WEIGHT * PRIOR_N / (n + PRIOR_N)
+    return max(0.0, min(1.0, prior + SLOPE * shrunk)), n, corr
 
 
 def compute_weights(store, prices, horizon, today, target="direction"):

@@ -114,7 +114,9 @@ def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, 
         if progress and (i + 1) % 100 == 0:
             progress(i + 1, len(days), day)
     try:
-        return report(cond, days, step, refit_every, refits, placebo, split)
+        rep = report(cond, days, step, refit_every, refits, placebo, split)
+        rep["stock_scoring"] = stock_scoring_section(cond, placebo, split)
+        return rep
     finally:
         store.close()          # Windows cannot delete or replace a SQLite file that is still open
 
@@ -175,6 +177,18 @@ def split_report(cond, parts, placebo_k=200):
     return dict(parts=out, same_sign_in_every_part=same,
                 note="A real effect keeps its sign and a small p in every part. One strong part and weak others "
                      "points to a single episode.")
+
+
+def stock_scoring_section(cond, placebo, split):
+    """Per-stock scoring when a stock price folder is there (python -m msc stock-prices), else a pointer to it."""
+    from .stock_scoring import DirStockPrices, stock_report, ticker_signals
+    if not ticker_signals(cond.store):
+        return "no ticker readings in this replay"
+    stocks = DirStockPrices(cond.cfg.stock_price_dir)
+    if not stocks.tickers():
+        return (f"off: no price files in {cond.cfg.stock_price_dir!r}. Run python -m msc stock-prices, then "
+                "python -m msc stock-score scores this replay without running it again")
+    return stock_report(cond.store, stocks, cond.price_history(), cond.cfg.horizon, placebo, split)
 
 
 def report(cond, days, step, refit_every=0, refits=0, placebo=200, split=0):

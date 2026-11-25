@@ -58,6 +58,7 @@ class Config:
     price_source: str = "fred"          # "fred" (S&P 500 closes, default), "stooq", or "file" (see price_file)
     price_file: str = ""                # CSV you downloaded (Date, Close, optional Open) when price_source is "file"
     price_symbol: str = "spy.us"        # Stooq symbol for the market anchor and for scoring
+    stock_price_dir: str = "stock_prices"   # folder of <TICKER>.csv daily prices for per-stock scoring
     target: str = "direction"          # what is forecast: direction, drawdown or vol_down (research targets, see weights.TARGETS)
     horizon: int = 20                   # trading days ahead that forecasts refer to
     calibrate: bool = True              # pull P(up) toward the track record (MSC_CALIBRATE=0 turns it off)
@@ -87,6 +88,7 @@ class Config:
             price_source=g("MSC_PRICE_SOURCE", "fred").lower(),
             price_file=g("MSC_PRICE_FILE", ""),
             price_symbol=g("MSC_PRICE_SYMBOL", "spy.us"),
+            stock_price_dir=g("MSC_STOCK_PRICE_DIR", "stock_prices"),
             horizon=int(g("MSC_HORIZON", "20")),
             target=g("MSC_TARGET", "direction"),
             calibrate=g("MSC_CALIBRATE", "1") != "0",

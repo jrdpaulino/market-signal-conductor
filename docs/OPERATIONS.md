@@ -133,7 +133,20 @@ Earnings drift is opt-in for the backfill because it needs `SEC_USER_AGENT` and 
 `python -m msc backfill --start 2013-01-01 --signals price_anchor,macro_curve,macro_credit,macro_vix,macro_labor,earnings_drift`.
 XBRL data starts around 2009-2011 and the signal needs about two years of quarters first, so start no earlier than 2013.
 A replay over today's watchlist has survivorship bias (today's winners). Only its market-wide breadth reading is
-scored and placebo-tested; the per-ticker readings move the stock tilts but are not yet scored against outcomes.
+scored and placebo-tested by the backfill itself; the per-ticker readings are scored separately (below).
+
+Per-stock scoring: ticker readings (earnings_drift, sec_filings) are scored against each stock's excess return
+(stock minus benchmark over the horizon, from the next open). It needs split-adjusted daily prices per stock in a
+folder of `<TICKER>.csv` files (`MSC_STOCK_PRICE_DIR`, default `stock_prices`). Fill it from Alpaca's free data API
+(set `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY`; IEX feed, history from about 2016), or drop in your own Date/Close
+CSVs. SPY.csv in the folder is used as the benchmark when present.
+
+    python -m msc stock-prices                       # watchlist / MSC_EARNINGS_TICKERS, plus SPY
+    python -m msc stock-score --split 2              # scores the last backfill without running it again
+
+A backfill also adds a `stock_scoring` section to its report when the folder has files. The report gives the
+correlation, the mean excess return after bullish and after bearish readings, and a calendar-rotation placebo p.
+Readings that repeat for weeks overlap heavily, so trust the placebo, not n.
 
 Two yardsticks: `brier_base_rate` uses the whole period's up-rate (hindsight, nothing can know it in advance);
 `brier_running_base_rate` uses only outcomes already known at each forecast date, which is what a naive forecaster

@@ -290,6 +290,15 @@ Wilson 95% lower bound on the hit rate above 0.5. No broker or order code exists
 A signal is any subclass of `Signal` that returns `Observation` objects, registered with `@register`. Extra modules
 load through `MSC_EXTRA_MODULES`. See `msc/signals/_template.py`.
 
+## Per-stock scoring
+
+Market readings earn reliability weights (`msc/weights.py`); the starting weight fades as outcomes accumulate
+(`PRIOR_N`), so a signal with no link ends near 0 instead of keeping an untested signal's say. Ticker readings are
+scored by `msc/stock_scoring.py`: score against the stock's excess return over the horizon, pooled over every
+(day, ticker), with a placebo that rotates the whole calendar against the outcomes. Prices come from a folder of
+per-ticker CSVs (`msc/alpaca.py` fills it). This is a report only; ticker scores do not yet feed back into the
+stock tilts.
+
 ## Calibration
 
 `calibration.py` adjusts the Markov model's P(up) using only outcomes already known: the level is pooled toward the
