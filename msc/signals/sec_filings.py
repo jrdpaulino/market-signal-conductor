@@ -82,6 +82,9 @@ class SecFilings(Signal):
     description = "Insider open-market buying clusters (Form 4) per ticker, and market-wide insider buy share."
     needs = ("SEC_USER_AGENT",)
 
+    def preflight(self, cfg):
+        sec_headers(cfg)
+
     def collect(self, ctx):
         headers = sec_headers(ctx.cfg)
         today = date.fromisoformat(ctx.day)

@@ -97,6 +97,11 @@ def main(argv=None):
             cond = build(cfg)
         end = a.end or today_utc()
         start = a.start or _d.fromisoformat(end).replace(year=_d.fromisoformat(end).year - 5).isoformat()
+        from .backfill import BACKFILL_SIGNALS, preflight_message
+        from .signals.base import REGISTRY, preflight_errors
+        problems = preflight_errors([REGISTRY[n]() for n in (names or BACKFILL_SIGNALS)], cfg)
+        if problems:
+            raise SystemExit(preflight_message(problems))
         out = a.db or backfill_path(cfg)
         prog = lambda i, n, d: print(f"  {i}/{n} days, at {d}")
         step = max(1, a.step)

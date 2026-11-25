@@ -28,6 +28,21 @@ class Signal:
         """Return a list of msc.models.Observation. Raise on failure; the engine records it as unhealthy."""
         raise NotImplementedError
 
+    def preflight(self, cfg):
+        """Raise if a setting this signal cannot run without is missing. The backfill calls this before it starts,
+        so a missing setting stops a long replay at once instead of failing on every replayed day."""
+
+
+def preflight_errors(signals, cfg):
+    """[(signal name, problem)] for every signal whose preflight check fails."""
+    out = []
+    for sig in signals:
+        try:
+            sig.preflight(cfg)
+        except Exception as exc:
+            out.append((sig.name, str(exc)))
+    return out
+
 
 def register(cls):
     if not cls.name:

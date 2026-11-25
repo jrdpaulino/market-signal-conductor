@@ -142,3 +142,41 @@ class SignalTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PreflightTests(unittest.TestCase):
+    def test_backfill_stops_before_replaying_and_keeps_the_old_database(self):
+        import os
+        import tempfile
+        from msc.backfill import backfill_path, run_backfill
+        from msc.config import Config
+        from msc.store import Store
+        from tests.test_core import make_prices
+        cfg = Config(db_path=os.path.join(tempfile.mkdtemp(), "live.sqlite"), sec_user_agent="")
+        old = Store(backfill_path(cfg))
+        old.kv_set("backfill_db", 1)
+        old.kv_set("marker", "previous replay")
+        old.close()
+        calls = []
+
+        class Http:
+            def get(self, url, **kw):
+                calls.append(url)
+                raise RuntimeError("should not be called")
+
+        with self.assertRaises(RuntimeError) as cm:
+            run_backfill(cfg, Http(), lambda: make_prices(400), "2000-01-01", "2100-01-01", backfill_path(cfg),
+                         signal_names=["price_anchor", "earnings_drift"])
+        self.assertIn("earnings_drift", str(cm.exception))
+        self.assertIn("SEC_USER_AGENT", str(cm.exception))
+        self.assertEqual(calls, [])
+        kept = Store(backfill_path(cfg))
+        self.assertEqual(kept.kv_get("marker"), "previous replay")
+        kept.close()
+
+    def test_signals_without_requirements_pass(self):
+        from msc.config import Config
+        from msc.signals.base import REGISTRY, preflight_errors
+        sigs = [REGISTRY[n]() for n in ("price_anchor", "macro_vix", "sec_filings", "earnings_drift")]
+        self.assertEqual([n for n, _p in preflight_errors(sigs, Config(sec_user_agent="a@b.c"))], [])
+        self.assertEqual(sorted(n for n, _p in preflight_errors(sigs, Config())), ["earnings_drift", "sec_filings"])

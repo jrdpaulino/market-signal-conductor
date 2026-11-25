@@ -191,6 +191,9 @@ class EarningsDrift(Signal):
     description = "Post-earnings drift: EPS vs the same quarter last year, scaled by its own history (SEC XBRL)."
     needs = ("SEC_USER_AGENT",)
 
+    def preflight(self, cfg):
+        sec_headers(cfg)
+
     def universe(self, cfg):
         return tuple(getattr(cfg, "earnings_tickers", ()) or cfg.watchlist)
 

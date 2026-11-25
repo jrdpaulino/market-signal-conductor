@@ -35,7 +35,7 @@ from .engine import Conductor
 from .version import commit_id
 from .execution.gate import brier_decomposition, check_gate, track_record
 from .signals import earnings_drift, macro_fred, price_anchor  # noqa: F401  (registers them)
-from .signals.base import REGISTRY
+from .signals.base import REGISTRY, preflight_errors
 from .store import Store
 
 OVERLAP_FLAG = 0.6
@@ -54,6 +54,11 @@ class CachingHttp:
         if key not in self.cache:
             self.cache[key] = self.http.get(url, params=params, **kw)
         return self.cache[key]
+
+
+def preflight_message(problems):
+    lines = [f"  {name}: {problem}" for name, problem in problems]
+    return "cannot start the backfill; fix these settings or leave the signals out with --signals:\n" + "\n".join(lines)
 
 
 def backfill_path(cfg, tag="backfill"):
@@ -87,8 +92,12 @@ def fresh_store(cfg, db_path):
 def run_backfill(cfg, http, prices, start, end, db_path, step=1, progress=None, refit_every=0, refit_after=120, placebo=200, signal_names=None, split=0):
     """Replay [start, end] into db_path and return a report dict. `prices` is the full price history callable.
     refit_every > 0: walk-forward re-fit of the model every that many replayed days, once refit_after have passed."""
+    signals = [REGISTRY[n]() for n in (signal_names or BACKFILL_SIGNALS)]
+    problems = preflight_errors(signals, cfg)
+    if problems:                                   # checked before fresh_store, so the previous replay is kept
+        raise RuntimeError(preflight_message(problems))
     store = fresh_store(cfg, db_path)
-    cond = Conductor(cfg, store, CachingHttp(http), [REGISTRY[n]() for n in (signal_names or BACKFILL_SIGNALS)], prices)
+    cond = Conductor(cfg, store, CachingHttp(http), signals, prices)
     px = prices()
     if not px:
         raise RuntimeError(f"the price source returned no rows (source {cfg.price_source!r}); Stooq in particular may now "
