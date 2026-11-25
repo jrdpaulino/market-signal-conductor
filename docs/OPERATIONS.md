@@ -126,6 +126,12 @@ and placebo p inside the slice) and reports whether each signal keeps its sign i
 source (FRED) has only about ten years of S&P history. Stooq may refuse downloads without a key, in which case the replay stops with a clear message. For longer replays download daily prices yourself (a CSV with Date and Close columns, Open optional; Stooq, Yahoo Finance and brokers all export one) and set `MSC_PRICE_SOURCE=file` and `MSC_PRICE_FILE=C:\\path\\spx.csv`.
 Example: `python -m msc backfill --start 1995-01-01 --split 3`.
 
+Earnings drift is opt-in for the backfill because it needs `SEC_USER_AGENT` and one SEC request per company:
+`python -m msc backfill --start 2013-01-01 --signals price_anchor,macro_curve,macro_credit,macro_vix,macro_labor,earnings_drift`.
+XBRL data starts around 2009-2011 and the signal needs about two years of quarters first, so start no earlier than 2013.
+A replay over today's watchlist has survivorship bias (today's winners). Only its market-wide breadth reading is
+scored and placebo-tested; the per-ticker readings move the stock tilts but are not yet scored against outcomes.
+
 Two yardsticks: `brier_base_rate` uses the whole period's up-rate (hindsight, nothing can know it in advance);
 `brier_running_base_rate` uses only outcomes already known at each forecast date, which is what a naive forecaster
 could really have said. Beating the running one is the fairer test; the gate still uses the hindsight one.

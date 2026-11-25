@@ -107,7 +107,7 @@ class EngineTests(unittest.TestCase):
         names = {s.name for s in load_signals(Config())}
         self.assertEqual(names, {"sec_filings", "prediction_markets", "social", "journals_news", "price_anchor",
                                  "macro_curve", "macro_credit", "macro_credit_long", "macro_vix", "macro_labor",
-                                 "macro_conditions", "anomaly_flow"})
+                                 "macro_conditions", "anomaly_flow", "earnings_drift"})
         self.assertEqual([s.name for s in load_signals(Config())][-1], "anomaly_flow")   # runs after what it reads
 
 

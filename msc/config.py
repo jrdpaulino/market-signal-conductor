@@ -47,6 +47,7 @@ class Config:
     db_path: str = "msc.sqlite"
     sec_user_agent: str = ""
     watchlist: tuple = ()
+    earnings_tickers: tuple = ()        # companies for earnings_drift; empty = the watchlist
     signals: tuple = ()                 # empty = every registered signal
     extra_modules: tuple = ()           # extra Python modules that register more signals
     rss_feeds: tuple = ()
@@ -75,6 +76,7 @@ class Config:
             db_path=g("MSC_DB", "msc.sqlite"),
             sec_user_agent=g("SEC_USER_AGENT", ""),
             watchlist=tuple(x.upper() for x in _list(g("MSC_WATCHLIST", DEFAULT_WATCHLIST))),
+            earnings_tickers=tuple(x.upper() for x in _list(g("MSC_EARNINGS_TICKERS", ""))),
             signals=tuple(_list(g("MSC_SIGNALS", ""))),
             extra_modules=tuple(_list(g("MSC_EXTRA_MODULES", ""))),
             rss_feeds=tuple(_list(g("MSC_RSS_FEEDS", DEFAULT_FEEDS))),

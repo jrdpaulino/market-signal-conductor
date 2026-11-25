@@ -55,7 +55,7 @@ def main(argv=None):
     b.add_argument("--refit-every", type=int, default=0, help="walk-forward re-fit of the model every N replayed days, after the first 120 (0 = never)")
     b.add_argument("--target", default=None, help="what to forecast: direction (default), drawdown or vol_down")
     b.add_argument("--horizon", type=int, default=None, help="trading days ahead (default: MSC_HORIZON, 20)")
-    b.add_argument("--signals", default=None, help="comma list of signals to replay (default: the backfillable set)")
+    b.add_argument("--signals", default=None, help="comma list of signals to replay (default: the backfillable set; earnings_drift is opt-in)")
     b.add_argument("--split", type=int, default=0, help="also score N consecutive slices of the history separately (2 = halves)")
     b.add_argument("--placebo", type=int, default=200, help="time-rotated placebo copies of each signal to compare against (0 = skip)")
     b.add_argument("--compare", action="store_true", help="run twice (no re-fit, then re-fit every 63 days) and compare")
@@ -85,10 +85,11 @@ def main(argv=None):
         from .weights import TARGETS
         names = [n.strip() for n in a.signals.split(",") if n.strip()] if a.signals else None
         if names:
-            from .backfill import BACKFILL_SIGNALS
-            bad = [n for n in names if n not in BACKFILL_SIGNALS]
+            from .backfill import BACKFILL_SIGNALS, OPT_IN_BACKFILL
+            allowed = BACKFILL_SIGNALS + OPT_IN_BACKFILL
+            bad = [n for n in names if n not in allowed]
             if bad:
-                ap.error(f"cannot replay {bad}; backfillable signals: {', '.join(BACKFILL_SIGNALS)}")
+                ap.error(f"cannot replay {bad}; backfillable signals: {', '.join(allowed)}")
         if a.target is not None and a.target not in TARGETS:
             ap.error(f"--target must be one of {', '.join(TARGETS)}")
         if a.target is not None or a.horizon is not None:      # research variants only change this replay, never the live setting

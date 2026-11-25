@@ -7,6 +7,10 @@ was public then. The others are left out rather than faked: prediction markets, 
 rewindable history. Insider filings (Form 4) could be replayed honestly by filing date, but a full replay is
 thousands of filings a day, so it is shelved until a bulk source is checked.
 
+`earnings_drift` can be replayed honestly (every XBRL fact carries its filing date and only first-filed values are
+used), but it is opt-in (`--signals ...,earnings_drift`) rather than in the default set: it needs SEC_USER_AGENT, makes
+one request per company, and a replay over today's watchlist carries survivorship bias.
+
 Walk-forward refit (optional): every `refit_every` replayed days the model is re-fitted with `Conductor.learn(as_of=day)`,
 which sees only data and outcomes known by that day, then used for the days that follow. That is the honest version
 of running `learn` on this history. The report always includes a Brier decomposition (calibration versus
@@ -30,12 +34,13 @@ from . import weights as W
 from .engine import Conductor
 from .version import commit_id
 from .execution.gate import brier_decomposition, check_gate, track_record
-from .signals import macro_fred, price_anchor  # noqa: F401  (registers them)
+from .signals import earnings_drift, macro_fred, price_anchor  # noqa: F401  (registers them)
 from .signals.base import REGISTRY
 from .store import Store
 
 OVERLAP_FLAG = 0.6
 BACKFILL_SIGNALS = ("price_anchor", "macro_curve", "macro_credit", "macro_credit_long", "macro_vix", "macro_labor")
+OPT_IN_BACKFILL = ("earnings_drift",)    # replayable honestly, but only when asked for (see the module docstring)
 
 
 class CachingHttp:

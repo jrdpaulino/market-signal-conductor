@@ -14,6 +14,7 @@ import xml.etree.ElementTree as ET
 from datetime import date, timedelta
 
 from ..models import Observation
+from ..sec import sec_headers
 from .base import Signal, register
 
 BASE = "https://www.sec.gov/Archives/"
@@ -82,10 +83,7 @@ class SecFilings(Signal):
     needs = ("SEC_USER_AGENT",)
 
     def collect(self, ctx):
-        ua = ctx.cfg.sec_user_agent
-        if "@" not in ua:
-            raise RuntimeError("SEC_USER_AGENT must contain a contact email (the SEC requires it)")
-        headers = {"User-Agent": ua}
+        headers = sec_headers(ctx.cfg)
         today = date.fromisoformat(ctx.day)
         budget = MAX_FILINGS_PER_RUN
         for back in range(BACKFILL_DAYS, -1, -1):

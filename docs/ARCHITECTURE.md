@@ -278,6 +278,7 @@ Wilson 95% lower bound on the hit rate above 0.5. No broker or order code exists
 | Signal | Source | Reads |
 | --- | --- | --- |
 | `sec_filings` | SEC EDGAR daily Form 4 index and XML | Insider open-market buying clusters per ticker; market-wide buy share |
+| `earnings_drift` | SEC XBRL company-concept API (EPS tags) | Seasonal earnings surprise (SUE) per ticker, using only facts filed by the run day and the year-ago comparative printed in the same filing; Q4 derived from the 10-K and skipped in a split year; market-wide surprise breadth |
 | `prediction_markets` | Polymarket Gamma API, Kalshi public market data | Week-over-week change in odds of stock-friendly outcomes (recession, Fed cuts, Fed hikes) |
 | `social` | Reddit RSS | Tone of cashtag chatter (currently blocked from cloud hosts) |
 | `journals_news` | RSS feeds | Tone, discounted by speculative wording |

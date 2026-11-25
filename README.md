@@ -45,6 +45,7 @@ signals (plugins) --> observations --> Markov core --> dashboard
 | Signal | Source | Needs |
 | --- | --- | --- |
 | `sec_filings` | SEC EDGAR Form 4 daily index: insider buying clusters per ticker; market-wide buy share | `SEC_USER_AGENT` with your email |
+| `earnings_drift` | SEC XBRL company-concept API: diluted EPS vs the same quarter a year earlier (the year-ago figure from the same filing, so splits cancel), standardized by its own eight-quarter history. Per ticker for about a quarter after the 10-Q/10-K is filed; market-wide surprise breadth. Companies in `MSC_EARNINGS_TICKERS` (default: the watchlist). Replayable by filing date, opt-in for the backfill | `SEC_USER_AGENT` with your email |
 | `prediction_markets` | Polymarket (Gamma API) and Kalshi (public market data): week-over-week change in odds of stock-friendly outcomes, tracked per venue | nothing (rules in `MSC_PM_RULES`, venues in `MSC_PM_VENUES`) |
 | `social` | Public Reddit RSS: tone of cashtag chatter | nothing |
 | `journals_news` | RSS feeds (`MSC_RSS_FEEDS`): tone, discounted by speculative wording | nothing |
